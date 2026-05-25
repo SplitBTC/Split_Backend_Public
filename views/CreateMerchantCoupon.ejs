@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <title>Create a Promo | Split</title>
+  <meta
+    name="description"
+    content="Submit a merchant coupon for review in Split."
+  />
+  <link rel="stylesheet" href="/css/CreateMerchantCoupon.css" type="text/css" />
+</head>
+<body>
+  <header class="nav">
+    <a href="/UserLanding" class="brand" aria-label="Split home">
+      <img src="/Split-images/token_logo.png" alt="Split logo" class="brand__logo" />
+      <span class="brand__name">Split</span>
+    </a>
+  </header>
+
+  <main class="page">
+    <section class="coupon-card">
+      <% if (submitted) { %>
+        <p class="eyebrow">Submission Received</p>
+        <h1>Promo submitted.</h1>
+        <p class="intro">
+          Your promo was received successfully and is now pending review before it can appear in Split.
+        </p>
+
+        <div class="banner banner--success" role="status">
+          Submission successful. We’ll review the promo and publish it once it is approved.
+        </div>
+
+        <div class="result-panel">
+          <h2>What happens next</h2>
+          <ul class="result-list">
+            <li>We review the offer, logo, and primary business address you submitted.</li>
+            <li>If anything needs clarification, we’ll follow up using the contact email you provided.</li>
+            <li>Approved promos can then be surfaced to nearby Split users.</li>
+          </ul>
+        </div>
+
+        <div class="result-actions">
+          <a href="/create_merchant_coupon" class="action-button action-button--primary">Submit another Promo</a>
+          <a href="/UserLanding" class="action-button action-button--ghost">Back to Split</a>
+        </div>
+      <% } else { %>
+        <h1>Create a Promo</h1>
+        <p class="intro">
+          Submit your offer for review. Promos apply across your business, and this primary address is
+          used to help nearby customers discover you in Split.
+        </p>
+
+        <% if (formError) { %>
+          <div class="banner banner--error" role="alert">
+            <%= formError %>
+          </div>
+        <% } %>
+
+        <form
+          action="/create_merchant_coupon"
+          method="POST"
+          enctype="multipart/form-data"
+          class="coupon-form"
+          novalidate
+        >
+          <div class="honeypot" aria-hidden="true">
+            <label for="website">Website</label>
+            <input id="website" name="website" type="text" tabindex="-1" autocomplete="off" />
+          </div>
+
+          <div class="field-grid">
+            <label class="field">
+              <span>Business name</span>
+              <input
+                type="text"
+                name="businessName"
+                value="<%= values.businessName %>"
+                maxlength="160"
+                required
+              />
+              <% if (fieldErrors.businessName) { %>
+                <small class="field-error"><%= fieldErrors.businessName %></small>
+              <% } %>
+            </label>
+
+            <label class="field">
+              <span>Contact email</span>
+              <input
+                type="email"
+                name="contactEmail"
+                value="<%= values.contactEmail %>"
+                maxlength="320"
+                inputmode="email"
+                required
+              />
+              <% if (fieldErrors.contactEmail) { %>
+                <small class="field-error"><%= fieldErrors.contactEmail %></small>
+              <% } %>
+            </label>
+          </div>
+
+          <label class="field">
+            <span>Business logo</span>
+            <input
+              type="file"
+              name="businessLogo"
+              accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+              required
+            />
+            <small class="field-hint">Upload a square or near-square logo image. Max 5 MB.</small>
+            <% if (fieldErrors.businessLogo) { %>
+              <small class="field-error"><%= fieldErrors.businessLogo %></small>
+            <% } %>
+          </label>
+
+          <label class="field">
+            <span>Promo description</span>
+            <textarea
+              name="dealDescription"
+              rows="5"
+              maxlength="2000"
+              required
+            ><%= values.dealDescription %></textarea>
+            <small class="field-hint">Include the offer details and pricing directly in the description.</small>
+            <% if (fieldErrors.dealDescription) { %>
+              <small class="field-error"><%= fieldErrors.dealDescription %></small>
+            <% } %>
+          </label>
+
+          <div class="section-heading">
+            <h2>Primary business address</h2>
+            <p>This US address is validated on the backend and used for customer discovery.</p>
+          </div>
+
+          <label class="field">
+            <span>Address line 1</span>
+            <input
+              type="text"
+              name="addressLine1"
+              value="<%= values.addressLine1 %>"
+              maxlength="120"
+              required
+            />
+            <% if (fieldErrors.addressLine1) { %>
+              <small class="field-error"><%= fieldErrors.addressLine1 %></small>
+            <% } %>
+          </label>
+
+          <label class="field">
+            <span>Address line 2</span>
+            <input
+              type="text"
+              name="addressLine2"
+              value="<%= values.addressLine2 %>"
+              maxlength="120"
+            />
+            <% if (fieldErrors.addressLine2) { %>
+              <small class="field-error"><%= fieldErrors.addressLine2 %></small>
+            <% } %>
+          </label>
+
+          <div class="field-grid field-grid--address">
+            <label class="field">
+              <span>City</span>
+              <input
+                type="text"
+                name="city"
+                value="<%= values.city %>"
+                maxlength="80"
+                required
+              />
+              <% if (fieldErrors.city) { %>
+                <small class="field-error"><%= fieldErrors.city %></small>
+              <% } %>
+            </label>
+
+            <label class="field">
+              <span>State</span>
+              <select name="state" required>
+                <option value="">Select a state</option>
+                <% states.forEach((stateOption) => { %>
+                  <option
+                    value="<%= stateOption.code %>"
+                    <%= values.state === stateOption.code ? 'selected' : '' %>
+                  >
+                    <%= stateOption.name %>
+                  </option>
+                <% }); %>
+              </select>
+              <% if (fieldErrors.state) { %>
+                <small class="field-error"><%= fieldErrors.state %></small>
+              <% } %>
+            </label>
+
+            <label class="field">
+              <span>ZIP code</span>
+              <input
+                type="text"
+                name="postalCode"
+                value="<%= values.postalCode %>"
+                maxlength="10"
+                inputmode="numeric"
+                required
+              />
+              <% if (fieldErrors.postalCode) { %>
+                <small class="field-error"><%= fieldErrors.postalCode %></small>
+              <% } %>
+            </label>
+          </div>
+
+          <div class="coupon-form__footer">
+            <p class="footnote">
+              Every submission is reviewed before it appears in the app.
+            </p>
+            <button type="submit" class="submit-button">Submit Promo</button>
+          </div>
+        </form>
+      <% } %>
+    </section>
+  </main>
+</body>
+</html>

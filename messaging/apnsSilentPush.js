@@ -2,7 +2,7 @@ const crypto = require('crypto');
 const http2 = require('http2');
 const fs = require('fs');
 
-const APNS_TOPIC = process.env.APNS_TOPIC || 'com.example.app';
+const APNS_TOPIC = process.env.APNS_TOPIC || 'com.splitloyalty.app.Split-Rewards';
 const APNS_KEY_ID = process.env.APNS_KEY_ID || '';
 const APNS_TEAM_ID = process.env.APNS_TEAM_ID || '';
 const APNS_PRIVATE_KEY = process.env.APNS_PRIVATE_KEY || '';

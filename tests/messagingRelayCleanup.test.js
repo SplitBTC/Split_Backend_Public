@@ -2,8 +2,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
+  expirePendingMessages,
   expirePendingAttachments,
   pruneOldAttachmentReceipts,
+  pruneOldReceipts,
 } = require('../messaging/messagingRelayCleanup');
 
 function buildQueryReturning(value) {
@@ -78,6 +80,75 @@ test('expirePendingAttachments deletes expired attachment blobs and marks record
   assert.equal(saveCalls.length, 2);
   assert.deepEqual(saveCalls.map((entry) => entry.status), ['expired', 'expired']);
   assert.deepEqual(saveCalls.map((entry) => entry.deletedAt), [now, now]);
+});
+
+test('expirePendingMessages marks expired pending rows as undelivered and clears sealed payload fields', async () => {
+  const now = new Date('2026-04-02T12:00:00.000Z');
+  const updateCalls = [];
+
+  const directMessageModel = {
+    async updateMany(filter, update) {
+      updateCalls.push({ filter, update });
+      return { modifiedCount: 2 };
+    },
+  };
+
+  await expirePendingMessages({
+    now,
+    directMessageModel,
+  });
+
+  assert.equal(updateCalls.length, 1);
+  assert.deepEqual(updateCalls[0].filter, {
+    status: 'pending',
+    expiresAt: { $lte: now },
+  });
+  assert.deepEqual(updateCalls[0].update, {
+    $set: {
+      status: 'undelivered',
+      expiredAt: now,
+    },
+    $unset: {
+      ciphertext: '',
+      nonce: '',
+      senderEphemeralPubkey: '',
+    },
+  });
+});
+
+test('pruneOldReceipts deletes delivered receipts by receipt expiry and keeps failures on retention window', async () => {
+  const now = new Date('2026-04-02T12:00:00.000Z');
+  const deleteCalls = [];
+
+  const directMessageModel = {
+    async deleteMany(filter) {
+      deleteCalls.push(filter);
+      return { deletedCount: 3 };
+    },
+  };
+
+  await pruneOldReceipts({
+    now,
+    directMessageModel,
+  });
+
+  assert.equal(deleteCalls.length, 1);
+  assert.deepEqual(deleteCalls[0], {
+    $or: [
+      {
+        status: 'delivered',
+        $or: [
+          { expiresAt: { $lte: now } },
+          { deliveredAt: { $lte: new Date(now.getTime() - 24 * 60 * 60 * 1000) } },
+          { updatedAt: { $lte: new Date(now.getTime() - 24 * 60 * 60 * 1000) } },
+        ],
+      },
+      {
+        status: { $in: ['rekey_required', 'same_key_retry_required', 'failed_same_key', 'undelivered'] },
+        updatedAt: { $lte: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000) },
+      },
+    ],
+  });
 });
 
 test('pruneOldAttachmentReceipts deletes old terminal attachment records after deleting blobs', async () => {

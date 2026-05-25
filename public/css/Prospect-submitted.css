@@ -1,0 +1,274 @@
+/* ===========
+   Split — Prospect Submitted
+   Minimal fintech thank-you screen aligned with Landing.css
+   =========== */
+
+:root {
+  --bg-start: #1a2a6c;
+  --bg-mid:   #b21f1f;
+  --bg-end:   #fdbb2d;
+  --grad: radial-gradient(1200px 700px at 20% -10%, #2a2f91 0%, #8a2be2 35%, #e141a2 68%, #ff6a88 100%);
+  --glass: rgba(255,255,255,.08);
+  --glass-strong: rgba(255,255,255,.16);
+  --card: #0f1020;
+  --text: #ffffff;
+  --muted: #cfd3df;
+  --ink: #0b0c10;
+  --brand: #ffffff;
+  --primary: #ffffff;
+  --shadow: 0 10px 30px rgba(0,0,0,.25);
+  --radius: 18px;
+  --radius-lg: 26px;
+  --maxw: 680px;
+  --speed: 220ms;
+  --focus: 0 0 0 3px rgba(255,255,255,.35), 0 0 1px 4px rgba(0,0,0,.35) inset;
+  font-synthesis-weight: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  color: var(--text);
+  background: #0a0b14;
+  background-image: var(--grad);
+  font: 400 16px/1.45 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans",
+    "Apple Color Emoji", "Segoe UI Emoji";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  display: flex;
+  flex-direction: column;
+}
+
+/* NAV (re-using landing brand style) --------------------------------------- */
+.nav {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 18px 20px;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.brand__logo {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  object-fit: cover;
+  background-color: #ffffff10;
+  padding: 3px;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.35));
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.15);
+}
+
+.brand__name {
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  opacity: 0.95;
+}
+
+/* MAIN LAYOUT -------------------------------------------------------------- */
+.thankyou {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 20px 40px;
+}
+
+.thankyou__card {
+  width: 100%;
+  max-width: var(--maxw);
+  background: rgba(15, 16, 32, 0.94);
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: var(--shadow);
+  padding: 32px 26px 28px;
+  backdrop-filter: blur(16px);
+}
+
+.thankyou__headline {
+  margin: 0 0 8px;
+  font-size: clamp(26px, 3vw, 32px);
+  font-weight: 700;
+  letter-spacing: -0.2px;
+}
+
+.thankyou__subheadline {
+  margin: 0 0 20px;
+  color: var(--muted);
+  font-size: 16px;
+}
+
+/* DETAILS SECTION ---------------------------------------------------------- */
+.thankyou__details {
+  margin-bottom: 22px;
+  padding: 16px 18px;
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.thankyou__details h2 {
+  margin: 0 0 10px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.thankyou__details ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* BUTTONS ------------------------------------------------------------------ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 150px;
+  height: 44px;
+  padding: 0 18px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-weight: 600;
+  text-decoration: none;
+  font-size: 14px;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    transform var(--speed) ease,
+    box-shadow var(--speed) ease,
+    background var(--speed) ease,
+    color var(--speed) ease,
+    border-color var(--speed) ease;
+}
+
+.btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+.btn--primary {
+  background: #ffffff;
+  color: #03040a;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+.btn--primary:hover {
+  transform: translateY(-1px);
+}
+
+.btn--ghost {
+  background: transparent;
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.38);
+  backdrop-filter: blur(8px);
+}
+
+.btn--ghost:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* Actions row */
+.thankyou__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+/* Footnote ---------------------------------------------------------- */
+.thankyou__footnote {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* FOOTER ------------------------------------------------------------ */
+.footer {
+  padding: 16px 20px 26px;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(12, 13, 28, 0.8) 60%,
+    rgba(7, 8, 18, 0.95) 100%
+  );
+}
+
+.footer__inner {
+  max-width: 960px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.footer__copy {
+  opacity: 0.9;
+}
+
+.footer__links {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.footer-link {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.footer-link:hover {
+  text-decoration: underline;
+}
+
+.dot {
+  opacity: 0.4;
+}
+
+/* RESPONSIVE -------------------------------------------------------- */
+@media (max-width: 640px) {
+  .thankyou__card {
+    padding: 26px 20px 24px;
+  }
+
+  .thankyou__actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .footer__inner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+}

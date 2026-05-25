@@ -5,6 +5,7 @@ const mongoose = require('mongoose');
 
 const { createApp } = require('./app');
 const { startMessagingRelayCleanup } = require('./messaging/messagingRelayCleanup');
+const { startBitcoinEventSyncJob } = require('./services/bitcoinEventSyncJob');
 
 const port = Number(process.env.PORT || 3000);
 
@@ -18,6 +19,7 @@ async function startServer() {
   await mongoose.connect(mongoUri);
   console.log('Connected to MongoDB');
   startMessagingRelayCleanup();
+  startBitcoinEventSyncJob();
 
   if (process.env.NODE_ENV === 'dev' && process.env.Ngrok_On === 'true') {
     try {

@@ -1,5 +1,8 @@
-const secretKey = process.env.secretKey;
 const jwt = require('jsonwebtoken');
+
+function getJwtSecretKey() {
+  return process.env.secretKey;
+}
 
 // User authentication middleware
 const userAuthMiddleware = (req, res, next) => {
@@ -11,7 +14,7 @@ const userAuthMiddleware = (req, res, next) => {
     }
 
     // Verify the token
-    const decoded = jwt.verify(token, secretKey);
+    const decoded = jwt.verify(token, getJwtSecretKey());
 
     // Extract userId from the decoded token
     const userId = decoded.userId;

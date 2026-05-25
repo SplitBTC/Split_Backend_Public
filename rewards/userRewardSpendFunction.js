@@ -1,14 +1,15 @@
 // userRewardSpendFunction.js
 /**
- * Records monthly merchant spend + tx count into RewardSpend for eligible lightning purchases,
+ * Records one permanent RewardSpendPayment row for each eligible lightning purchase,
  * and records transaction + volume into PlatformAnalytics (sats + cents).
  *
  * NOTE: Always increments platform-wide transactions/volume.
- *       Only increments RewardSpend + lifetimeMerchantSpendCents when eligible merchant.
+ *       Only increments reward ledger + lifetimeMerchantSpendCents when eligible merchant.
+ *       A duplicate payment hash is treated as already accounted and skipped.
  */
 async function userRewardSpendFunction({
   User,
-  RewardSpend,
+  RewardSpendPayment,
   MerchantPubKey,
   PlatformAnalytics,
   userId,
@@ -18,15 +19,34 @@ async function userRewardSpendFunction({
   network,
   direction,
   finalStatus,
+  paymentHash,
 }) {
+  const result = {
+    rewardSpendApplied: false,
+    merchantMatched: false,
+    rewardSpendPaymentRecorded: false,
+    duplicatePaymentHash: false,
+  };
+
   try {
     // Guards for when this endpoint should apply
-    if (finalStatus !== 'Completed') return;
-    if (network !== 'lightning') return;
-    if (direction !== 'sent') return;
+    if (finalStatus !== 'Completed') return result;
+    if (network !== 'lightning') return result;
+    if (direction !== 'sent') return result;
 
-    if (!Number.isFinite(usdAmountCentsNum) || usdAmountCentsNum <= 0) return;
-    if (!Number.isInteger(btcAmountSatsNum) || btcAmountSatsNum <= 0) return;
+    if (!Number.isFinite(usdAmountCentsNum) || usdAmountCentsNum <= 0) return result;
+    if (!Number.isInteger(btcAmountSatsNum) || btcAmountSatsNum <= 0) return result;
+
+    const normalizedPaymentHash =
+      typeof paymentHash === 'string' && paymentHash.trim().length > 0
+        ? paymentHash.trim()
+        : null;
+    const normalizedDestinationPubkey =
+      typeof destinationPubkey === 'string' && destinationPubkey.trim().length > 0
+        ? destinationPubkey.trim().toLowerCase()
+        : null;
+
+    if (!normalizedPaymentHash) return result;
 
     // Always update platform-wide totals
     const inc = {
@@ -37,13 +57,15 @@ async function userRewardSpendFunction({
 
     // Merchant attribution only if we have a destination and it matches an eligible merchant
     let eligible = null;
-    if (destinationPubkey) {
-      eligible = await MerchantPubKey.findOne({ pubkey: destinationPubkey })
+    if (normalizedDestinationPubkey) {
+      eligible = await MerchantPubKey.findOne(merchantPubkeyQuery(normalizedDestinationPubkey))
         .select('_id')
         .lean();
     }
 
     if (eligible) {
+      result.merchantMatched = true;
+
       inc.merchantTransactions = 1;
       inc['merchantVolume.btcSats'] = btcAmountSatsNum;
       inc['merchantVolume.usdCents'] = usdAmountCentsNum;
@@ -51,24 +73,39 @@ async function userRewardSpendFunction({
       // Compute current monthKey in UTC (YYYY-MM)
       const monthKey = new Date().toISOString().slice(0, 7);
 
-      // Increment monthly per-user spend + transaction count (create if missing)
-      await RewardSpend.updateOne(
-        { monthKey, userId },
-        {
-          $setOnInsert: { monthKey, userId },
-          $inc: {
-            merchantSpend: usdAmountCentsNum,
-            transactions: 1,
-          },
-        },
-        { upsert: true }
-      );
+      try {
+        const paymentPayload = {
+          userId,
+          destinationPubkey: normalizedDestinationPubkey,
+          btcAmountSats: btcAmountSatsNum,
+          usdAmountCents: usdAmountCentsNum,
+          network,
+          direction,
+          status: finalStatus,
+          monthKey,
+          occurredAt: new Date(),
+        };
+
+        paymentPayload.paymentHash = normalizedPaymentHash;
+
+        await RewardSpendPayment.create(paymentPayload);
+        result.rewardSpendPaymentRecorded = true;
+      } catch (err) {
+        if (err && err.code === 11000) {
+          result.duplicatePaymentHash = true;
+          return result;
+        }
+
+        throw err;
+      }
 
       // Track lifetime merchant spend on user (no reward credits anymore)
       await User.updateOne(
         { _id: userId },
         { $inc: { lifetimeMerchantSpendCents: usdAmountCentsNum } }
       );
+
+      result.rewardSpendApplied = true;
     }
 
     await PlatformAnalytics.updateOne(
@@ -76,9 +113,25 @@ async function userRewardSpendFunction({
       { $inc: inc },
       { upsert: true }
     );
+
+    return result;
   } catch (err) {
     console.error('userRewardSpendFunction error:', err);
+    return result;
   }
+}
+
+function merchantPubkeyQuery(pubkey) {
+  return {
+    pubkey: {
+      $regex: `^${escapeRegExp(pubkey)}$`,
+      $options: 'i',
+    },
+  };
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 module.exports = userRewardSpendFunction;

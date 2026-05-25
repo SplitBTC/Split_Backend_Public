@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+  <title>Admin Login</title>
+
+  <script src="https://unpkg.com/boxicons@2.1.4/dist/boxicons.js"></script>
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="stylesheet" href="/css/Split.css" type="text/css" />
+  <link rel="stylesheet" href="/css/Admin-login.css" type="text/css" />
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-05YTF1Y41D"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){ dataLayer.push(arguments); }
+    gtag('js', new Date());
+    gtag('config', 'G-05YTF1Y41D');
+  </script>
+</head>
+
+<body>
+  <header>
+    <h1>Admin Login</h1>
+  </header>
+
+  <main>
+    <form action="/Admin-login" method="POST" class="admin-login-form">
+      <div class="field">
+        <label for="username">Admin:</label>
+        <input type="text" id="username" name="username" required />
+      </div>
+
+      <div class="field">
+        <label for="password">Password:</label>
+        <input type="password" id="password" name="password" required />
+      </div>
+
+      <button type="submit">Login</button>
+    </form>
+  </main>
+</body>
+</html>

@@ -34,7 +34,7 @@ function computeRootFromProof(leafHash, proof) {
 function buildBinding(overrides = {}) {
   return {
     walletPubkey: '02aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-    lightningAddress: 'alice@example.com',
+    lightningAddress: 'alice@split-loyalty.com',
     messagingPubkey: '02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
     messagingIdentitySignature: '3045022100feedface',
     messagingIdentitySignatureVersion: 2,
@@ -46,7 +46,7 @@ function buildBinding(overrides = {}) {
 test('canonicalizeBinding normalizes casing and trims user-controlled fields', () => {
   const normalized = canonicalizeBinding(buildBinding({
     walletPubkey: '  02AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA  ',
-    lightningAddress: '  Alice@Example.com ',
+    lightningAddress: '  Alice@Split-Loyalty.com ',
     messagingPubkey: '  02BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB  ',
     messagingIdentitySignature: '  3045022100FEEDFACE  ',
     messagingIdentitySignatureVersion: '2',
@@ -55,7 +55,7 @@ test('canonicalizeBinding normalizes casing and trims user-controlled fields', (
 
   assert.deepEqual(normalized, {
     walletPubkey: '02AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
-    lightningAddress: 'alice@example.com',
+    lightningAddress: 'alice@split-loyalty.com',
     messagingPubkey: '02BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
     messagingIdentitySignature: '3045022100FEEDFACE',
     messagingIdentitySignatureVersion: 2,
@@ -66,7 +66,7 @@ test('canonicalizeBinding normalizes casing and trims user-controlled fields', (
 test('buildBindingLeafHash is stable across whitespace and address-case changes', () => {
   const baseHash = buildBindingLeafHash(buildBinding());
   const variantHash = buildBindingLeafHash(buildBinding({
-    lightningAddress: '  ALICE@EXAMPLE.COM ',
+    lightningAddress: '  ALICE@SPLIT-LOYALTY.COM ',
     walletPubkey: ' 02aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa ',
     messagingPubkey: ' 02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb ',
     messagingIdentitySignature: ' 3045022100feedface ',
@@ -84,12 +84,12 @@ test('buildMerkleProof can reconstruct the current root for an odd-sized tree', 
     buildBindingLeafHash(buildBinding()),
     buildBindingLeafHash(buildBinding({
       walletPubkey: '02cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
-      lightningAddress: 'bob@example.com',
+      lightningAddress: 'bob@split-loyalty.com',
       messagingPubkey: '02dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
     })),
     buildBindingLeafHash(buildBinding({
       walletPubkey: '02eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
-      lightningAddress: 'carol@example.com',
+      lightningAddress: 'carol@split-loyalty.com',
       messagingPubkey: '02ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
     })),
   ];

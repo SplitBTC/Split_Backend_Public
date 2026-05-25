@@ -26,7 +26,7 @@ domain=${domain}
 nonce=${nonce}`;
 }
 
-function issueNonce({ ttlMs = 5 * 60 * 1000, domain = 'example.invalid' } = {}) {
+function issueNonce({ ttlMs = 5 * 60 * 1000, domain = 'splitrewards.app' } = {}) {
   pruneNonces();
 
   const nonce = generateNonce();

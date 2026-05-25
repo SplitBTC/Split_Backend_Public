@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <title>Split | Open Source Repos</title>
+  <meta
+    name="description"
+    content="Open source repositories from Split, including the iOS wallet, backend, and Bitcoin tax prep."
+  />
+
+  <link rel="stylesheet" href="/css/FossProjects.css" type="text/css" />
+</head>
+<body>
+  <%
+    const projectList = Array.isArray(projects) ? projects : [];
+  %>
+
+  <div class="foss-page">
+    <header class="foss-hero">
+      <div class="shell">
+        <nav class="foss-topbar">
+          <a href="/UserLanding" class="brand-mark" aria-label="Split home">
+            <img src="/Split-images/token_logo.png" alt="Split" class="brand-mark__logo" />
+            <span class="brand-mark__text">Split</span>
+          </a>
+        </nav>
+
+        <div class="foss-hero__copy">
+          <p class="section-kicker">Open Source At Split</p>
+          <h1>Don't trust verify.</h1>
+          <p class="foss-hero__subtitle">
+            We believe open source is essential to building in Bitcoin. We do our best to keep our
+            public repos updated and maintained. We encourage and welcome your scrutiny and critiques.
+          </p>
+        </div>
+      </div>
+    </header>
+
+    <main class="shell foss-main">
+      <% projectList.forEach((project) => { %>
+        <article class="project-card" id="<%= project.slug %>">
+          <div class="project-card__content">
+            <div class="project-card__eyebrow">
+              <span class="project-badge"><%= project.status %></span>
+              <span class="project-name"><%= project.name %></span>
+            </div>
+
+            <h2><%= project.title %></h2>
+            <p class="project-card__description"><%= project.description %></p>
+
+            <ul class="project-highlights">
+              <% (project.highlights || []).forEach((highlight) => { %>
+                <li><%= highlight %></li>
+              <% }) %>
+            </ul>
+
+            <div class="project-actions">
+              <a
+                class="btn btn--primary"
+                href="<%= project.repoUrl %>"
+                target="_blank"
+                rel="noopener"
+              >
+                View GitHub Repo
+              </a>
+
+              <% if (project.liveUrl) { %>
+                <a class="btn btn--ghost" href="<%= project.liveUrl %>">
+                  <%= project.liveLabel || 'Open Project' %>
+                </a>
+              <% } %>
+            </div>
+          </div>
+
+          <aside class="project-panel">
+            <p class="project-panel__label">Current Focus</p>
+            <h3><%= project.focusTitle || 'Current work in public.' %></h3>
+            <p>
+              <%= project.focusText || 'This project is being published to make the current work easier to inspect in public.' %>
+            </p>
+          </aside>
+        </article>
+      <% }) %>
+    </main>
+
+    <footer class="foss-footer shell">
+      <a href="/UserLanding">Back to Split</a>
+      <a href="/User-agreement" target="_blank" rel="noopener">User Agreement</a>
+      <a href="/Privacy-policy" target="_blank" rel="noopener">Privacy Policy</a>
+    </footer>
+  </div>
+</body>
+</html>

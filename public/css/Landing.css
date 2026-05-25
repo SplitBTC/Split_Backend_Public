@@ -1,0 +1,499 @@
+/* ===========
+   Split — Landing New
+   Minimal fintech: gradient hero, glass cards, clean type.
+   =========== */
+
+:root{
+  --bg-start: #1a2a6c;
+  --bg-mid:   #b21f1f;
+  --bg-end:   #fdbb2d;
+  /* Using your purple→pink→blue vibe; tweak to exact brand if needed */
+  --grad: radial-gradient(1200px 700px at 20% -10%, #2a2f91 0%, #8a2be2 35%, #e141a2 68%, #ff6a88 100%);
+  --glass: rgba(255,255,255,.08);
+  --glass-strong: rgba(255,255,255,.16);
+  --card: #0f1020;
+  --text: #ffffff;
+  --muted: #cfd3df;
+  --ink: #0b0c10;
+  --brand: #ffffff;
+  --primary: #ffffff;
+  --shadow: 0 10px 30px rgba(0,0,0,.25);
+  --radius: 18px;
+  --radius-lg: 26px;
+  --maxw: 1120px;
+  --speed: 220ms;
+  --focus: 0 0 0 3px rgba(255,255,255,.35), 0 0 1px 4px rgba(0,0,0,.35) inset;
+
+  /* New: typography tuning */
+  --body: rgba(255,255,255,.90);
+  --body-soft: rgba(255,255,255,.82);
+  --measure: 70ch; /* comfortable paragraph line length */
+  --p-size: 16.5px;
+  --p-lh: 1.72;
+  --p-track: 0.1px;
+
+  font-synthesis-weight: none;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body{
+  margin: 0; color: var(--text); background: black;
+  font: 400 16px/1.45 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
+  -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+}
+
+.container{ width: 100%; max-width: var(--maxw); margin: 0 auto; padding: 0 20px; }
+
+/* TYPOGRAPHY ------------------------------------------------------ */
+/* Make <p> feel more intentional everywhere, without touching copy */
+p{
+  color: var(--body-soft);
+  font-size: var(--p-size);
+  line-height: var(--p-lh);
+  letter-spacing: var(--p-track);
+  margin: 0 0 16px;
+  max-width: var(--measure);
+  text-wrap: pretty;            /* modern browsers */
+  hanging-punctuation: first;   /* subtle polish where supported */
+}
+
+/* Links inside paragraphs: clearer but still clean */
+p a{
+  color: rgba(255,255,255,.95);
+  text-decoration: none;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+}
+p a:hover{ text-decoration: underline; }
+
+/* NAV + HERO ------------------------------------------------------ */
+.hero{
+  position: relative;
+  overflow: hidden;
+  background: var(--grad);
+  color: var(--text);
+  padding-bottom: 56px;
+}
+
+.nav__login{
+  color: #fff;
+  text-decoration: none;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.35);
+  backdrop-filter: blur(8px);
+  background: rgba(255,255,255,.10);
+  transition: background var(--speed) ease, transform var(--speed) ease;
+}
+
+.nav__login:hover{
+  background: rgba(255,255,255,.22);
+  transform: translateY(-1px);
+}
+
+/* Minimal nav (brand moved into hero) */
+.nav{
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 22px 20px;
+  max-width: var(--maxw);
+  margin: 0 auto;
+}
+.nav__spacer{ height: 34px; }
+
+/* Hero content */
+.hero__content{
+  max-width: var(--maxw);
+  margin: 40px auto 0;
+  padding: 0 20px;
+  text-align: left;
+
+  /* IMPORTANT: make logo vars available to siblings like CTAs */
+  --logo-size: clamp(44px, 5vw, 72px);
+  --logo-gap: 14px;
+}
+
+/* Headline base */
+.hero__headline{
+  font-size: clamp(32px, 5vw, 60px);
+  line-height: 1.05;
+  margin: 8px 0 14px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+/* Logo + text lockup */
+.hero__headline--lockup{
+  display: grid;
+  gap: 8px;
+}
+
+/* First line: logo + text */
+.hero__headline-row{
+  display: inline-flex;
+  align-items: center;
+  gap: var(--logo-gap);
+  flex-wrap: nowrap; /* prevents 3-line wrapping */
+}
+
+.hero__logo{
+  width: var(--logo-size);
+  height: var(--logo-size);
+  border-radius: 50%;
+  object-fit: cover;
+  background-color: rgba(255,255,255,.10);
+  padding: 5px;
+  box-shadow: 0 10px 26px rgba(0,0,0,.25);
+  flex: 0 0 auto;
+}
+
+/* Prevent "Empower Customers" from breaking */
+.hero__headline-text{
+  white-space: nowrap;
+  line-height: 1.05;
+}
+
+/* Second line */
+.hero__headline-line2{
+  display: block;
+  margin-bottom: 20px;
+}
+
+/* Align second line with text, not logo */
+.hero__headline-indent{
+  display: block;
+  margin-left: calc(var(--logo-size) + var(--logo-gap));
+  line-height: 1.05;
+}
+
+/* Subheadline (kept here in case you re-add it later) */
+.hero__subheadline{
+  font-size: clamp(18px, 2.2vw, 22px);
+  color: rgba(255,255,255,.84);
+  margin: 0 0 28px;
+  max-width: 62ch;
+  line-height: 1.55;
+  letter-spacing: 0.1px;
+}
+
+/* CTAs */
+.hero__ctas{
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 28px; /* breathing room before sections */
+
+  /* FIX: start buttons under the headline text (not under logo) */
+  padding-left: calc(var(--logo-size) + var(--logo-gap));
+
+  /* FIX: add space from hero text */
+  margin-top: 18px;
+}
+
+/* SPLIT INTRO (NEW SECTION) --------------------------------------- */
+.split-intro{
+  margin-top: 18px;         /* sits just below CTAs */
+  margin-bottom: 26px;      /* clear separation before benefits */
+
+  background: rgba(255,255,255,.08);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: var(--radius-lg);
+  padding: clamp(18px, 3vw, 28px);
+
+  box-shadow: var(--shadow);
+}
+
+.split-intro p{
+  margin: 0;
+  max-width: 64ch;
+  color: rgba(255,255,255,.90);
+  font-size: 17px;
+  line-height: 1.7;
+  letter-spacing: 0.15px;
+}
+
+.split-intro strong{
+  color: #ffffff;
+  font-weight: 700;
+}
+
+/* Section titles used inside split-intro + benefits */
+.section-title{
+  margin: 0 0 14px;
+  text-align: left;            /* LEFT aligned */
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.2px;
+  color: rgba(255,255,255,.95);
+}
+
+/* Benefits section is a grid — title must span full width */
+.benefits .section-title{
+  grid-column: 1 / -1;
+  margin: 2px 0 6px;
+}
+
+.split-intro .section-title{
+  margin-bottom: 10px;
+}
+
+/* MOBILE HERO FIX — FORCE 2 CLEAN LINES */
+@media (max-width: 560px){
+
+  /* Stack logo ABOVE headline for more horizontal room */
+  .hero__headline-row{
+    display: grid;
+    grid-template-columns: 1fr;
+    justify-items: center;
+    gap: 10px;
+  }
+
+  .hero__logo{
+    width: 74px;
+    height: 74px;
+    padding: 5px;
+  }
+
+  /* Force first line to stay on ONE line (now safe because font scales down) */
+  .hero__headline-text{
+    display: block;
+    text-align: center;
+  }
+
+  /* Second line is always the second line */
+  .hero__headline-line2,
+  .hero__headline-indent{
+    display: block;
+    margin-left: 0;          /* no indent on mobile */
+    text-align: center;
+    white-space: nowrap;     /* prevents splitting */
+  }
+
+  /* Scale down more aggressively so line 1 fits on small phones */
+  .hero__headline{
+    font-size: clamp(24px, 7.6vw, 36px);
+    letter-spacing: -0.7px;
+    line-height: 1.05;
+  }
+
+  .hero__content{
+    margin-top: 28px;
+  }
+
+  .hero__subheadline{
+    max-width: 34ch;
+    text-align: center;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .hero__ctas{
+    justify-content: center;
+    padding-left: 0; /* no indent on mobile */
+    margin-top: 14px;
+  }
+
+  /* NEW: split-intro mobile tuning (integrated here — no duplicate @media) */
+  .split-intro{
+    margin-top: 16px;
+    margin-bottom: 22px;
+    padding: 18px;
+  }
+  .split-intro p{
+    font-size: 16px;
+    line-height: 1.65;
+    max-width: 42ch;
+    text-align: center;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .section-title{
+    text-align: center;
+  }
+}
+
+/* Extra-small phones (iPhone SE-ish) */
+@media (max-width: 380px){
+  .hero__headline{
+    font-size: clamp(22px, 8.2vw, 32px);
+  }
+}
+
+.brand{ display: inline-flex; align-items: center; gap: 10px; color: inherit; text-decoration: none; }
+.brand__logo{ width: 34px; height: 34px; filter: drop-shadow(0 2px 8px rgba(0,0,0,.35)); }
+.brand__logo {
+  border-radius: 50%;
+  object-fit: cover;
+  background-color: #ffffff10; /* subtle background to emphasize shape */
+  padding: 3px; /* slight breathing room inside circle */
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.15);
+}
+.brand__name{ font-weight: 700; letter-spacing: .6px; opacity: .95; }
+
+.btn{
+  display: inline-flex; align-items: center; justify-content: center;
+  height: 44px; padding: 0 18px; border-radius: 999px; border: 1px solid transparent;
+  font-weight: 600; text-decoration: none; color: var(--ink);
+  transition: transform var(--speed) ease, box-shadow var(--speed) ease, background var(--speed) ease, color var(--speed) ease, border-color var(--speed) ease;
+  cursor: pointer; user-select: none;
+}
+.btn:focus-visible{ outline: none; box-shadow: var(--focus); }
+
+.btn--primary{
+  background: #ffffff; color: #03040a;
+  box-shadow: 0 8px 24px rgba(0,0,0,.25);
+}
+.btn--primary:hover{ transform: translateY(-1px); }
+
+.btn--ghost{
+  background: var(--grad);
+  color: #fff;
+  border-color: rgba(255,255,255,.28);
+  backdrop-filter: blur(8px);
+}
+.btn--ghost:hover{ background: rgba(255,255,255,.20); }
+
+.btn--full{ width: 100%; }
+
+.hero__badge{
+  display: inline-flex; align-items: center; gap: 10px;
+  margin-top: 20px; padding: 10px 14px; border-radius: 999px;
+  background: rgba(255,255,255,.10); backdrop-filter: blur(6px);
+  color: #fff; font-size: 14px;
+}
+.badge__dot{ width: 8px; height: 8px; border-radius: 50%; background: #fff; display: inline-block; }
+
+/* PROOF SECTION (MATCHES LEAD BEHAVIOR) -------------------------- */
+.proof{
+  padding: 32px 20px 32px;
+  background:#1f235f;
+}
+
+/* This is the “card”, but image-backed */
+.proof__media{
+  position: relative;
+  min-height: 620px;
+  padding: 72px 20px;
+
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+
+  background-color: #1f235f; /* darker than #2a2f91 */
+  background-image:
+    linear-gradient(
+      to bottom,
+      rgba(31,35,95,.15) 0%,
+      rgba(31,35,95,.45) 60%,
+      rgba(10,11,20,.7) 100%
+    ),
+    url("/Split-images/Split_Store_Sign.png");
+
+  background-size: cover;
+  background-position: 70% 60%;
+  background-repeat: no-repeat;
+
+  box-shadow: var(--shadow);
+}
+
+/* LEAD / CONTACT -------------------------------------------------- */
+.lead{
+  display: grid; gap: 22px; grid-template-columns: 2fr 1fr;
+  padding: 24px 20px 90px;
+}
+.lead__card{
+  background: #0d0f22; border: 1px solid rgba(255,255,255,.12);
+  border-radius: var(--radius-lg); padding: 26px; box-shadow: var(--shadow);
+}
+.lead__card h2{ margin: 0 0 8px; font-size: 26px; }
+.lead__card p{ margin: 0 0 18px; color: #cfd3df; }
+
+.lead-form{ display: grid; gap: 12px; }
+.lead-form input{
+  width: 100%; height: 46px; border-radius: 12px; padding: 0 14px;
+  color: #0b0c10; background: #fff; border: 1px solid #e7e8f0;
+  outline: none; transition: box-shadow var(--speed) ease, border-color var(--speed) ease;
+}
+.lead-form input:focus{ border-color: #c8c9d6; box-shadow: 0 0 0 4px rgba(255,255,255,.18); }
+.lead-form .hp{ display: none !important; }
+
+/* Gradient button for lead form */
+.lead-form button.btn--primary {
+  background: var(--grad); /* same gradient used for hero */
+  color: #fff; /* white text */
+  border-color: rgba(255,255,255,.28);
+  width: 100%; /* narrower than full width inputs */
+  margin: 0 auto; /* center horizontally */
+  display: block;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  transition: transform var(--speed) ease, box-shadow var(--speed) ease;
+}
+
+.lead-form button.btn--primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+}
+
+.contact{
+  background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.14);
+  border-radius: var(--radius-lg); padding: 22px; color: #e9ecf5;
+  box-shadow: var(--shadow);
+}
+.contact h3{ margin: 0 0 8px; font-size: 18px; }
+
+/* Contact paragraph: slightly tighter & clearer */
+.contact p{
+  margin: 0 0 14px;
+  color: rgba(255,255,255,.80);
+  font-size: 15.5px;
+  line-height: 1.6;
+  max-width: 50ch;
+}
+
+/* FOOTER ---------------------------------------------------------- */
+.footer{
+  background: linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(12,13,28,1) 50%, rgba(7,8,18,1) 100%);
+  padding: 48px 0;
+}
+.footer__inner{
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+}
+.footer__brand{ display: inline-flex; align-items: center; gap: 10px; opacity: .95; }
+.footer__links{ display: inline-flex; align-items: center; gap: 10px; }
+.footer-link{ color: #cfd3df; text-decoration: none; }
+.footer-link:hover{ text-decoration: underline; }
+.dot{ opacity: .4; }
+
+/* RESPONSIVE ------------------------------------------------------ */
+@media (max-width: 980px){
+  .lead{ grid-template-columns: 1fr; }
+  .hero__content{ text-align: left; }
+
+  /* On small screens, keep paragraphs comfortably narrow */
+  p{ max-width: 62ch; }
+}
+
+@media (prefers-reduced-motion: reduce){
+  *{ transition: none !important; }
+}
+
+/* PROOF — MOBILE TUNING ----------------------------------------- */
+@media (max-width: 560px){
+  .proof{
+    padding: 24px 16px;
+  }
+
+  .proof__media{
+    min-height: 290px;   /* key change */
+    padding: 32px 16px;
+
+    /* Recenter for smaller screens */
+    background-position: center;
+  }
+}

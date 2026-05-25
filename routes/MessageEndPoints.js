@@ -25,12 +25,17 @@ const {
   emptyRootHash,
 } = require('../messaging/messagingDirectory');
 
-const MESSAGE_TTL_HOURS = 24 * 30;
-const MESSAGING_IDENTITY_SIGNATURE_VERSION = 1;
+const MESSAGE_TTL_HOURS = 24 * 14;
+const ACTIONABLE_OUTGOING_MESSAGE_STATUSES = [
+  'rekey_required',
+  'same_key_retry_required',
+  'failed_same_key',
+  'undelivered',
+];
 const MESSAGING_IDENTITY_V2_SIGNATURE_VERSION = 2;
 const MESSAGING_ENVELOPE_SIGNATURE_VERSION = 1;
 const MESSAGING_DEVICE_REGISTRATION_SIGNATURE_VERSION = 1;
-const MESSAGING_IDENTITY_DOMAIN = process.env.MESSAGING_IDENTITY_DOMAIN || 'example.invalid';
+const MESSAGING_IDENTITY_DOMAIN = process.env.MESSAGING_IDENTITY_DOMAIN || 'splitrewards.app';
 const MESSAGING_DIRECTORY_STATE_KEY = 'messaging-v2-directory';
 const ATTACHMENT_MAX_BYTES = 50 * 1024 * 1024;
 const attachmentUpload = multer({
@@ -346,7 +351,7 @@ function buildMessagingIdentityBindingMessage({
   lightningAddress,
   messagingPubkey,
   signedAt,
-  version = MESSAGING_IDENTITY_SIGNATURE_VERSION,
+  version = MESSAGING_IDENTITY_V2_SIGNATURE_VERSION,
   domain = MESSAGING_IDENTITY_DOMAIN,
 }) {
   return `SplitRewards Messaging Identity Authorization
@@ -556,32 +561,20 @@ function normalizeAndValidateMessagingDeviceRegistration(payload) {
   };
 }
 
-function buildResolvedMessagingIdentityBinding(user, { version = MESSAGING_IDENTITY_SIGNATURE_VERSION } = {}) {
-  const isV2 = version === MESSAGING_IDENTITY_V2_SIGNATURE_VERSION;
-
+function buildResolvedMessagingIdentityBinding(user) {
   return {
     walletPubkey: user.walletPubkey,
     lightningAddress: user.lightningAddress || null,
-    messagingPubkey: isV2
-      ? (user.messagingPubkeyV2 || null)
-      : (user.messagingPubkey || null),
-    messagingIdentitySignature: isV2
-      ? (user.messagingIdentityV2Signature || null)
-      : (user.messagingIdentitySignature || null),
-    messagingIdentitySignatureVersion: isV2
-      ? (user.messagingIdentityV2SignatureVersion || null)
-      : (user.messagingIdentitySignatureVersion || null),
-    messagingIdentitySignedAt: isV2
-      ? (user.messagingIdentityV2SignedAt || null)
-      : (user.messagingIdentitySignedAt || null),
-    messagingIdentityUpdatedAt: isV2
-      ? (user.messagingIdentityV2UpdatedAt || null)
-      : (user.messagingIdentityUpdatedAt || null),
+    messagingPubkey: user.messagingPubkeyV2 || null,
+    messagingIdentitySignature: user.messagingIdentityV2Signature || null,
+    messagingIdentitySignatureVersion: user.messagingIdentityV2SignatureVersion || null,
+    messagingIdentitySignedAt: user.messagingIdentityV2SignedAt || null,
+    messagingIdentityUpdatedAt: user.messagingIdentityV2UpdatedAt || null,
   };
 }
 
-function hasResolvedMessagingIdentityBinding(user, { version = MESSAGING_IDENTITY_SIGNATURE_VERSION } = {}) {
-  const binding = buildResolvedMessagingIdentityBinding(user, { version });
+function hasResolvedMessagingIdentityBinding(user) {
+  const binding = buildResolvedMessagingIdentityBinding(user);
 
   return !!(
     binding.walletPubkey &&
@@ -742,8 +735,8 @@ function verifyMessagingDeviceRegistration(registration) {
   });
 }
 
-function resolvedBindingMatchesUser(user, binding, { version = MESSAGING_IDENTITY_V2_SIGNATURE_VERSION } = {}) {
-  const snapshot = buildResolvedMessagingIdentityBinding(user, { version });
+function resolvedBindingMatchesUser(user, binding) {
+  const snapshot = buildResolvedMessagingIdentityBinding(user);
 
   return (
     normalizeWalletPubkey(snapshot.walletPubkey).toLowerCase() === binding.walletPubkey.toLowerCase() &&
@@ -755,22 +748,8 @@ function resolvedBindingMatchesUser(user, binding, { version = MESSAGING_IDENTIT
   );
 }
 
-function stripMessagingIdentityBinding(user) {
-  return {
-    walletPubkey: user.walletPubkey,
-    lightningAddress: user.lightningAddress || null,
-    messagingPubkey: user.messagingPubkey || null,
-    messagingIdentitySignature: user.messagingIdentitySignature || null,
-    messagingIdentitySignatureVersion: user.messagingIdentitySignatureVersion || null,
-    messagingIdentitySignedAt: user.messagingIdentitySignedAt || null,
-    messagingIdentityUpdatedAt: user.messagingIdentityUpdatedAt || null,
-  };
-}
-
 function stripMessagingIdentityBindingV2(user) {
-  return buildResolvedMessagingIdentityBinding(user, {
-    version: MESSAGING_IDENTITY_V2_SIGNATURE_VERSION,
-  });
+  return buildResolvedMessagingIdentityBinding(user);
 }
 
 function stripMessagingDeviceRegistration(registration) {
@@ -790,11 +769,8 @@ function stripMessagingDeviceRegistration(registration) {
   };
 }
 
-function buildResolvedMessagingIdentityBindingRecord(
-  user,
-  { version = MESSAGING_IDENTITY_V2_SIGNATURE_VERSION } = {}
-) {
-  const snapshot = buildResolvedMessagingIdentityBinding(user, { version });
+function buildResolvedMessagingIdentityBindingRecord(user) {
+  const snapshot = buildResolvedMessagingIdentityBinding(user);
   const signedAtSeconds = bindingSignedAtSeconds(snapshot.messagingIdentitySignedAt);
 
   return {
@@ -972,7 +948,7 @@ async function sendOutgoingStatusPushNotifications({ directMessages }) {
   const senderUsers = await User.find({
     _id: { $in: senderUserIds },
   })
-    .select('_id messagingPubkey messagingPubkeyV2')
+    .select('_id messagingPubkeyV2')
     .lean();
   const senderUserById = new Map(senderUsers.map((user) => [String(user._id), user]));
 
@@ -985,9 +961,7 @@ async function sendOutgoingStatusPushNotifications({ directMessages }) {
       continue;
     }
 
-    const activeSenderMessagingPubkeys = buildAcceptedRecipientMessagingPubkeys(senderUser, {
-      requireV2: true,
-    });
+    const activeSenderMessagingPubkeys = buildAcceptedRecipientMessagingPubkeys(senderUser);
     if (!activeSenderMessagingPubkeys.length) {
       continue;
     }
@@ -1010,16 +984,91 @@ async function sendOutgoingStatusPushNotifications({ directMessages }) {
   };
 }
 
-function buildAcceptedRecipientMessagingPubkeys(user, { requireV2 = false } = {}) {
-  const normalizedV2MessagingPubkey = normalizeMessagingPubkey(user?.messagingPubkeyV2);
-  if (requireV2 && !normalizedV2MessagingPubkey) {
-    return [];
+async function markPendingMessagesRekeyRequired({
+  recipientUserId,
+  acceptedRecipientMessagingPubkeys,
+  objectIds = null,
+}) {
+  if (!recipientUserId || !Array.isArray(acceptedRecipientMessagingPubkeys) || !acceptedRecipientMessagingPubkeys.length) {
+    return {
+      updatedCount: 0,
+      resetAttachmentCount: 0,
+    };
   }
 
-  return [
-    normalizedV2MessagingPubkey,
-    normalizeMessagingPubkey(user?.messagingPubkey),
-  ].filter((value, index, array) => value && array.indexOf(value) === index);
+  const pendingMessagesFilter = {
+    recipientUserId,
+    recipientMessagingPubkey: { $in: acceptedRecipientMessagingPubkeys },
+    status: 'pending',
+  };
+
+  if (Array.isArray(objectIds) && objectIds.length) {
+    pendingMessagesFilter._id = { $in: objectIds };
+  }
+
+  const now = new Date();
+  const pendingMessages = await DirectMessage.find(pendingMessagesFilter)
+    .select('_id senderUserId recipientWalletPubkey');
+
+  if (!pendingMessages.length) {
+    return {
+      updatedCount: 0,
+      resetAttachmentCount: 0,
+    };
+  }
+
+  const messageIdsToUpdate = pendingMessages.map((message) => message._id);
+  const [messageUpdateResult, attachmentResetResult] = await Promise.all([
+    DirectMessage.updateMany(
+      {
+        _id: { $in: messageIdsToUpdate },
+        status: 'pending',
+      },
+      {
+        $set: {
+          status: 'rekey_required',
+          rekeyRequiredAt: now,
+        },
+        $unset: {
+          ciphertext: '',
+          nonce: '',
+          senderEphemeralPubkey: '',
+        },
+      }
+    ),
+    MessageAttachment.updateMany(
+      {
+        linkedMessageId: { $in: messageIdsToUpdate },
+        recipientUserId,
+        status: 'linked',
+      },
+      {
+        $set: {
+          status: 'uploaded',
+        },
+        $unset: {
+          linkedMessageId: '',
+          linkedClientMessageId: '',
+        },
+      }
+    ),
+  ]);
+
+  void sendOutgoingStatusPushNotifications({
+    directMessages: pendingMessages,
+  }).catch((pushError) => {
+    console.warn('Failed to send messaging rekey-required push notifications:', pushError);
+  });
+
+  return {
+    updatedCount: messageUpdateResult.modifiedCount || 0,
+    resetAttachmentCount: attachmentResetResult.modifiedCount || 0,
+  };
+}
+
+function buildAcceptedRecipientMessagingPubkeys(user) {
+  const normalizedV2MessagingPubkey = normalizeMessagingPubkey(user?.messagingPubkeyV2);
+  return normalizedV2MessagingPubkey ? [normalizedV2MessagingPubkey] : [];
 }
 
 function normalizeDirectMessageObjectIds(messageIds) {
@@ -1036,8 +1085,8 @@ function stripOutgoingDirectMessageStatus(message) {
   return {
     messageId: String(message._id),
     clientMessageId: message.clientMessageId,
-    recipientLightningAddress: message.recipientLightningAddress,
-    recipientWalletPubkey: message.recipientWalletPubkey,
+    recipientLightningAddress: message.recipientLightningAddress || null,
+    recipientWalletPubkey: message.recipientWalletPubkey || null,
     status: message.status,
     sameKeyRetryCount: Number(message.sameKeyRetryCount || 0),
     createdAt: message.createdAt,
@@ -1047,6 +1096,34 @@ function stripOutgoingDirectMessageStatus(message) {
     failedAt: message.failedAt,
     expiredAt: message.expiredAt,
   };
+}
+
+async function loadOutgoingStatusMessages({
+  senderUserId,
+  limit,
+  directMessageModel = DirectMessage,
+}) {
+  const actionableMessages = await directMessageModel.find({
+    senderUserId,
+    status: { $in: ACTIONABLE_OUTGOING_MESSAGE_STATUSES },
+  })
+    .sort({ updatedAt: -1, createdAt: -1 })
+    .limit(limit)
+    .lean();
+
+  if (actionableMessages.length >= limit) {
+    return actionableMessages;
+  }
+
+  const recentMessages = await directMessageModel.find({
+    senderUserId,
+    status: { $nin: ACTIONABLE_OUTGOING_MESSAGE_STATUSES },
+  })
+    .sort({ createdAt: -1 })
+    .limit(limit - actionableMessages.length)
+    .lean();
+
+  return actionableMessages.concat(recentMessages);
 }
 
 function stripDirectoryCheckpoint(checkpoint) {
@@ -1190,143 +1267,7 @@ async function buildDirectoryProofForBinding(binding) {
   });
 }
 
-router.get('/messaging-key', userAuthMiddleware, async (req, res) => {
-  try {
-    const userId = req.userId;
-
-    const user = await User.findById(userId).select(
-      '_id walletPubkey lightningAddress messagingPubkey messagingIdentitySignature messagingIdentitySignatureVersion messagingIdentitySignedAt messagingIdentityUpdatedAt'
-    );
-    if (!user) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-
-    return res.status(200).json({
-      ok: true,
-      ...stripMessagingIdentityBinding(user),
-    });
-  } catch (error) {
-    console.error('Error fetching messaging key:', error);
-    return res.status(500).json({ error: 'Internal Server Error' });
-  }
-});
-
-router.post('/messaging-key', userAuthMiddleware, async (req, res) => {
-  try {
-    const userId = req.userId;
-    const {
-      walletPubkey,
-      lightningAddress,
-      messagingPubkey,
-      messagingIdentitySignature,
-      messagingIdentitySignatureVersion,
-      messagingIdentitySignedAt,
-    } = req.body || {};
-
-    const errors = [];
-    if (!walletPubkey || typeof walletPubkey !== 'string') errors.push('walletPubkey is required');
-    if (!lightningAddress || typeof lightningAddress !== 'string') errors.push('lightningAddress is required');
-    if (!messagingPubkey || typeof messagingPubkey !== 'string') errors.push('messagingPubkey is required');
-    if (!messagingIdentitySignature || typeof messagingIdentitySignature !== 'string') errors.push('messagingIdentitySignature is required');
-    if (!Number.isInteger(messagingIdentitySignatureVersion)) errors.push('messagingIdentitySignatureVersion must be an integer');
-    if (!Number.isInteger(messagingIdentitySignedAt)) errors.push('messagingIdentitySignedAt must be a unix timestamp in seconds');
-
-    if (errors.length) {
-      return res.status(400).json({ error: 'Invalid request', details: errors });
-    }
-
-    const trimmedWalletPubkey = walletPubkey.trim();
-    const normalizedLightningAddress = normalizeLightningAddress(lightningAddress);
-    const trimmedMessagingPubkey = messagingPubkey.trim();
-    const trimmedSignature = messagingIdentitySignature.trim();
-
-    if (!(/^(02|03)[0-9a-fA-F]{64}$/.test(trimmedWalletPubkey) || /^(04)?[0-9a-fA-F]{128}$/.test(trimmedWalletPubkey))) {
-      return res.status(400).json({ error: 'walletPubkey format is invalid' });
-    }
-
-    if (!normalizedLightningAddress || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedLightningAddress)) {
-      return res.status(400).json({ error: 'lightningAddress format is invalid' });
-    }
-
-    if (!(/^(02|03)[0-9a-fA-F]{64}$/.test(trimmedMessagingPubkey) || /^[0-9a-fA-F]{64}$/.test(trimmedMessagingPubkey))) {
-      return res.status(400).json({ error: 'messagingPubkey format is invalid' });
-    }
-
-    if (messagingIdentitySignatureVersion !== MESSAGING_IDENTITY_SIGNATURE_VERSION) {
-      return res.status(400).json({ error: 'Unsupported messagingIdentitySignatureVersion' });
-    }
-
-    const signedAtMs = messagingIdentitySignedAt * 1000;
-    if (!Number.isFinite(signedAtMs) || signedAtMs <= 0) {
-      return res.status(400).json({ error: 'messagingIdentitySignedAt is invalid' });
-    }
-
-    const user = await User.findById(userId).select(
-      '_id walletPubkey lightningAddress messagingPubkey messagingIdentitySignature messagingIdentitySignatureVersion messagingIdentitySignedAt messagingIdentityUpdatedAt'
-    );
-    if (!user) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-
-    if (String(user.walletPubkey).trim().toLowerCase() !== trimmedWalletPubkey.toLowerCase()) {
-      return res.status(403).json({ error: 'walletPubkey does not match the authenticated user' });
-    }
-
-    if (!user.lightningAddress) {
-      return res.status(409).json({ error: 'lightningAddress must exist before messaging can be activated' });
-    }
-
-    if (normalizeLightningAddress(user.lightningAddress) !== normalizedLightningAddress) {
-      return res.status(403).json({ error: 'lightningAddress does not match the authenticated user' });
-    }
-
-    const canonicalMessage = buildMessagingIdentityBindingMessage({
-      walletPubkey: trimmedWalletPubkey,
-      lightningAddress: normalizedLightningAddress,
-      messagingPubkey: trimmedMessagingPubkey,
-      signedAt: messagingIdentitySignedAt,
-      version: messagingIdentitySignatureVersion,
-    });
-
-    const isValidSignature = sessionHelper.verifyBreezSignedMessage({
-      message: canonicalMessage,
-      pubkey: trimmedWalletPubkey,
-      signature: trimmedSignature,
-    });
-
-    if (!isValidSignature) {
-      return res.status(401).json({ error: 'Invalid messaging key signature' });
-    }
-
-    const didRotate = !!user.messagingPubkey && user.messagingPubkey !== trimmedMessagingPubkey;
-    const didUpdate =
-      user.messagingPubkey !== trimmedMessagingPubkey ||
-      user.messagingIdentitySignature !== trimmedSignature ||
-      user.messagingIdentitySignatureVersion !== messagingIdentitySignatureVersion ||
-      String(user.messagingIdentitySignedAt ? user.messagingIdentitySignedAt.getTime() : '') !== String(signedAtMs);
-
-    if (didUpdate) {
-      user.messagingPubkey = trimmedMessagingPubkey;
-      user.messagingIdentitySignature = trimmedSignature;
-      user.messagingIdentitySignatureVersion = messagingIdentitySignatureVersion;
-      user.messagingIdentitySignedAt = new Date(signedAtMs);
-      user.messagingIdentityUpdatedAt = new Date();
-      await user.save();
-    }
-
-    return res.status(200).json({
-      ok: true,
-      didUpdate,
-      didRotate,
-      ...stripMessagingIdentityBinding(user),
-    });
-  } catch (error) {
-    console.error('Error registering messaging key:', error);
-    return res.status(500).json({ error: 'Internal Server Error' });
-  }
-});
-
-async function handleMessagingV2LikeIdentityGet(req, res) {
+async function handleMessagingIdentityGet(req, res) {
   try {
     const user = await User.findById(req.userId).select(
       '_id walletPubkey lightningAddress messagingPubkeyV2 messagingIdentityV2Signature messagingIdentityV2SignatureVersion messagingIdentityV2SignedAt messagingIdentityV2UpdatedAt'
@@ -1337,12 +1278,8 @@ async function handleMessagingV2LikeIdentityGet(req, res) {
     }
 
     let directory = null;
-    if (hasResolvedMessagingIdentityBinding(user, {
-      version: MESSAGING_IDENTITY_V2_SIGNATURE_VERSION,
-    })) {
-      const binding = buildResolvedMessagingIdentityBindingRecord(user, {
-        version: MESSAGING_IDENTITY_V2_SIGNATURE_VERSION,
-      });
+    if (hasResolvedMessagingIdentityBinding(user)) {
+      const binding = buildResolvedMessagingIdentityBindingRecord(user);
       await appendMessagingBindingLogEntry({
         userId: user._id,
         binding,
@@ -1356,12 +1293,12 @@ async function handleMessagingV2LikeIdentityGet(req, res) {
       directory,
     });
   } catch (error) {
-    console.error('Error fetching messaging v2 identity:', error);
+    console.error('Error fetching messaging identity:', error);
     return res.status(500).json({ error: 'Internal Server Error' });
   }
 }
 
-async function handleMessagingV2LikeIdentityPost(req, res) {
+async function handleMessagingIdentityPost(req, res) {
   try {
     const userId = req.userId;
     const normalized = normalizeAndValidateMessagingIdentityBinding(req.body, {
@@ -1389,6 +1326,7 @@ async function handleMessagingV2LikeIdentityPost(req, res) {
       return res.status(401).json({ error: 'Invalid messaging v2 identity signature' });
     }
 
+    const previousMessagingPubkey = normalizeMessagingPubkey(user.messagingPubkeyV2);
     const didRotate = !!user.messagingPubkeyV2 && user.messagingPubkeyV2 !== binding.messagingPubkey;
     const didUpdate =
       normalizeLightningAddress(user.lightningAddress) !== binding.lightningAddress ||
@@ -1405,6 +1343,13 @@ async function handleMessagingV2LikeIdentityPost(req, res) {
       user.messagingIdentityV2SignedAt = binding.messagingIdentitySignedAtDate;
       user.messagingIdentityV2UpdatedAt = new Date();
       await user.save();
+    }
+
+    if (didRotate && previousMessagingPubkey) {
+      await markPendingMessagesRekeyRequired({
+        recipientUserId: user._id,
+        acceptedRecipientMessagingPubkeys: [previousMessagingPubkey],
+      });
     }
 
     await deleteStaleMessagingDeviceRegistrations({
@@ -1430,27 +1375,13 @@ async function handleMessagingV2LikeIdentityPost(req, res) {
       return res.status(409).json({ error: 'lightningAddress already exists on another user' });
     }
 
-    console.error('Error registering messaging v2 identity:', error);
+    console.error('Error registering messaging identity:', error);
     return res.status(500).json({ error: 'Internal Server Error' });
   }
 }
 
-router.get('/messaging/v2/identity', userAuthMiddleware, handleMessagingV2LikeIdentityGet);
-router.post('/messaging/v2/identity', userAuthMiddleware, handleMessagingV2LikeIdentityPost);
-router.get('/messaging/v3/identity', userAuthMiddleware, handleMessagingV2LikeIdentityGet);
-router.post('/messaging/v3/identity', userAuthMiddleware, handleMessagingV2LikeIdentityPost);
-
-router.get('/messaging/device-token', userAuthMiddleware, async (req, res) => {
-  return res.status(410).json({
-    error: 'Deprecated. Use /messaging/v3/device-registrations',
-  });
-});
-
-router.post('/messaging/device-token', userAuthMiddleware, async (req, res) => {
-  return res.status(410).json({
-    error: 'Deprecated. Use /messaging/v3/device-registrations',
-  });
-});
+router.get('/messaging/v3/identity', userAuthMiddleware, handleMessagingIdentityGet);
+router.post('/messaging/v3/identity', userAuthMiddleware, handleMessagingIdentityPost);
 
 router.get('/messaging/blocks', userAuthMiddleware, async (req, res) => {
   try {
@@ -1589,77 +1520,7 @@ router.delete('/messaging/blocks/:blockedWalletPubkey', userAuthMiddleware, asyn
   }
 });
 
-router.post('/messaging/resolve-recipient', userAuthMiddleware, async (req, res) => {
-  try {
-    const userId = req.userId;
-    const { lightningAddress } = req.body || {};
-
-    const normalizedLightningAddress = normalizeLightningAddress(lightningAddress);
-    if (!normalizedLightningAddress) {
-      return res.status(400).json({ error: 'lightningAddress is required' });
-    }
-
-    const sender = await User.findById(userId).select(
-      '_id walletPubkey messagingPubkey lightningAddress messagingIdentitySignature messagingIdentitySignatureVersion messagingIdentitySignedAt'
-    );
-    if (!sender) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-
-    if (!sender.lightningAddress) {
-      return res.status(409).json({ error: 'Sender lightningAddress is not set' });
-    }
-
-    if (!sender.messagingPubkey || !sender.messagingIdentitySignature || !sender.messagingIdentitySignatureVersion || !sender.messagingIdentitySignedAt) {
-      return res.status(409).json({ error: 'Sender messaging identity is not registered' });
-    }
-
-    const recipient = await User.findOne({ lightningAddress: normalizedLightningAddress })
-      .select('_id walletPubkey lightningAddress messagingPubkey messagingIdentitySignature messagingIdentitySignatureVersion messagingIdentitySignedAt profilePicUrl');
-
-    if (!recipient) {
-      return res.status(404).json({ error: 'Recipient not found' });
-    }
-
-    if (String(recipient._id) === String(sender._id)) {
-      return res.status(400).json({ error: 'Cannot message yourself' });
-    }
-
-    const blockError = buildMessagingBlockError(await getMessagingBlockState({
-      requesterUserId: sender._id,
-      targetUserId: recipient._id,
-    }));
-    if (blockError) {
-      return res.status(blockError.status).json({ error: blockError.error });
-    }
-
-    if (!recipient.messagingPubkey) {
-      return res.status(409).json({ error: 'Recipient messaging is not active' });
-    }
-
-    if (!recipient.messagingIdentitySignature || !recipient.messagingIdentitySignatureVersion || !recipient.messagingIdentitySignedAt) {
-      return res.status(409).json({ error: 'Recipient messaging identity is not signed yet' });
-    }
-
-    return res.status(200).json({
-      ok: true,
-      recipient: {
-        walletPubkey: recipient.walletPubkey,
-        lightningAddress: recipient.lightningAddress,
-        messagingPubkey: recipient.messagingPubkey,
-        messagingIdentitySignature: recipient.messagingIdentitySignature,
-        messagingIdentitySignatureVersion: recipient.messagingIdentitySignatureVersion,
-        messagingIdentitySignedAt: recipient.messagingIdentitySignedAt,
-        profilePicUrl: recipient.profilePicUrl || null,
-      },
-    });
-  } catch (error) {
-    console.error('Error resolving messaging recipient:', error);
-    return res.status(500).json({ error: 'Internal Server Error' });
-  }
-});
-
-async function handleMessagingV2DirectoryLookup(req, res) {
+async function handleMessagingDirectoryLookup(req, res) {
   try {
     const userId = req.userId;
     const normalizedLightningAddress = normalizeLightningAddress(req.body?.lightningAddress);
@@ -1680,9 +1541,7 @@ async function handleMessagingV2DirectoryLookup(req, res) {
       return res.status(409).json({ error: 'Sender lightningAddress is not set' });
     }
 
-    if (!hasResolvedMessagingIdentityBinding(sender, {
-      version: MESSAGING_IDENTITY_V2_SIGNATURE_VERSION,
-    })) {
+    if (!hasResolvedMessagingIdentityBinding(sender)) {
       return res.status(409).json({ error: 'Sender messaging v2 identity is not registered' });
     }
 
@@ -1706,15 +1565,11 @@ async function handleMessagingV2DirectoryLookup(req, res) {
       return res.status(blockError.status).json({ error: blockError.error });
     }
 
-    if (!hasResolvedMessagingIdentityBinding(recipient, {
-      version: MESSAGING_IDENTITY_V2_SIGNATURE_VERSION,
-    })) {
+    if (!hasResolvedMessagingIdentityBinding(recipient)) {
       return res.status(409).json({ error: 'Recipient messaging v2 is not active' });
     }
 
-    const recipientBinding = buildResolvedMessagingIdentityBindingRecord(recipient, {
-      version: MESSAGING_IDENTITY_V2_SIGNATURE_VERSION,
-    });
+    const recipientBinding = buildResolvedMessagingIdentityBindingRecord(recipient);
     await appendMessagingBindingLogEntry({
       userId: recipient._id,
       binding: recipientBinding,
@@ -1730,59 +1585,12 @@ async function handleMessagingV2DirectoryLookup(req, res) {
       directory,
     });
   } catch (error) {
-    console.error('Error resolving messaging v2 recipient:', error);
+    console.error('Error resolving messaging recipient:', error);
     return res.status(500).json({ error: 'Internal Server Error' });
   }
 }
 
-router.post('/messaging/v2/resolve-recipient', userAuthMiddleware, handleMessagingV2DirectoryLookup);
-router.post('/messaging/v2/directory/lookup', userAuthMiddleware, handleMessagingV2DirectoryLookup);
-router.post('/messaging/v3/directory/lookup', userAuthMiddleware, handleMessagingV2DirectoryLookup);
-
-router.get('/messaging/v3/device-registrations', userAuthMiddleware, async (req, res) => {
-  try {
-    const requestedEnvironment = req.query?.environment;
-    const hasRequestedEnvironment = requestedEnvironment !== undefined &&
-      requestedEnvironment !== null &&
-      String(requestedEnvironment).trim() !== '';
-    const environment = hasRequestedEnvironment
-      ? normalizeMessagingEnvironment(requestedEnvironment)
-      : currentMessagingPushEnvironment();
-
-    if (!environment) {
-      return res.status(400).json({ error: 'environment must be dev or prod' });
-    }
-
-    const user = await User.findById(req.userId).select('_id walletPubkey messagingPubkeyV2');
-    if (!user) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-
-    const activeMessagingPubkey = normalizeMessagingPubkey(user.messagingPubkeyV2);
-    if (!activeMessagingPubkey) {
-      return res.status(409).json({ error: 'Messaging v3 identity is not registered' });
-    }
-
-    const registrations = await MessagingDeviceRegistration.find({
-      userId: user._id,
-      messagingPubkey: activeMessagingPubkey,
-      environment,
-    })
-      .sort({ updatedAt: -1 })
-      .lean();
-
-    return res.status(200).json({
-      ok: true,
-      walletPubkey: user.walletPubkey,
-      messagingPubkey: activeMessagingPubkey,
-      environment,
-      registrations: registrations.map(stripMessagingDeviceRegistration),
-    });
-  } catch (error) {
-    console.error('Error fetching messaging v3 device registrations:', error);
-    return res.status(500).json({ error: 'Internal Server Error' });
-  }
-});
+router.post('/messaging/v3/directory/lookup', userAuthMiddleware, handleMessagingDirectoryLookup);
 
 router.post('/messaging/v3/device-registrations', userAuthMiddleware, async (req, res) => {
   try {
@@ -1806,9 +1614,7 @@ router.post('/messaging/v3/device-registrations', userAuthMiddleware, async (req
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    if (!hasResolvedMessagingIdentityBinding(user, {
-      version: MESSAGING_IDENTITY_V2_SIGNATURE_VERSION,
-    })) {
+    if (!hasResolvedMessagingIdentityBinding(user)) {
       return res.status(409).json({ error: 'Messaging v3 identity is not registered' });
     }
 
@@ -1900,9 +1706,7 @@ router.post('/messaging/v2/attachments/upload', userAuthMiddleware, attachmentUp
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    if (!hasResolvedMessagingIdentityBinding(sender, {
-      version: MESSAGING_IDENTITY_V2_SIGNATURE_VERSION,
-    })) {
+    if (!hasResolvedMessagingIdentityBinding(sender)) {
       return res.status(409).json({ error: 'Sender messaging v2 identity is not registered' });
     }
 
@@ -1939,15 +1743,11 @@ router.post('/messaging/v2/attachments/upload', userAuthMiddleware, attachmentUp
       return res.status(blockError.status).json({ error: blockError.error });
     }
 
-    if (!hasResolvedMessagingIdentityBinding(recipient, {
-      version: MESSAGING_IDENTITY_V2_SIGNATURE_VERSION,
-    })) {
+    if (!hasResolvedMessagingIdentityBinding(recipient)) {
       return res.status(409).json({ error: 'Recipient messaging v2 is not active' });
     }
 
-    if (!resolvedBindingMatchesUser(recipient, recipientBinding, {
-      version: MESSAGING_IDENTITY_V2_SIGNATURE_VERSION,
-    })) {
+    if (!resolvedBindingMatchesUser(recipient, recipientBinding)) {
       return res.status(409).json({ error: 'Recipient messaging v2 binding is stale, resolve again' });
     }
 
@@ -1979,88 +1779,6 @@ router.post('/messaging/v2/attachments/upload', userAuthMiddleware, attachmentUp
     });
   } catch (error) {
     console.error('Error uploading messaging v2 attachment:', error);
-    return res.status(500).json({ error: 'Internal Server Error' });
-  }
-});
-
-router.post('/messaging/attachments/upload', userAuthMiddleware, attachmentUpload.single('attachment'), async (req, res) => {
-  try {
-    const userId = req.userId;
-    const normalizedRecipientAddress = normalizeLightningAddress(req.body?.recipientLightningAddress);
-    const file = req.file;
-
-    if (!normalizedRecipientAddress) {
-      return res.status(400).json({ error: 'recipientLightningAddress is required' });
-    }
-
-    if (!file || !file.buffer || !file.size) {
-      return res.status(400).json({ error: 'attachment file is required' });
-    }
-
-    const sender = await User.findById(userId).select('_id walletPubkey messagingPubkey lightningAddress');
-    if (!sender) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-
-    if (!sender.messagingPubkey) {
-      return res.status(409).json({ error: 'Sender messaging identity is not registered' });
-    }
-
-    if (!sender.lightningAddress) {
-      return res.status(409).json({ error: 'Sender lightningAddress is not set' });
-    }
-
-    const recipient = await User.findOne({ lightningAddress: normalizedRecipientAddress })
-      .select('_id walletPubkey lightningAddress messagingPubkey');
-
-    if (!recipient) {
-      return res.status(404).json({ error: 'Recipient not found' });
-    }
-
-    if (String(recipient._id) === String(sender._id)) {
-      return res.status(400).json({ error: 'Cannot message yourself' });
-    }
-
-    const blockError = buildMessagingBlockError(await getMessagingBlockState({
-      requesterUserId: sender._id,
-      targetUserId: recipient._id,
-    }));
-    if (blockError) {
-      return res.status(blockError.status).json({ error: blockError.error });
-    }
-
-    if (!recipient.messagingPubkey) {
-      return res.status(409).json({ error: 'Recipient messaging is not active' });
-    }
-
-    const objectKey = buildAttachmentObjectKey({ senderUserId: sender._id });
-
-    await s3Client.send(new PutObjectCommand({
-      Bucket: process.env.R2_BUCKET,
-      Key: objectKey,
-      Body: file.buffer,
-      ContentType: file.mimetype || 'application/octet-stream',
-    }));
-
-    const expiresAt = new Date(Date.now() + MESSAGE_TTL_HOURS * 60 * 60 * 1000);
-
-    const attachment = await MessageAttachment.create({
-      senderUserId: sender._id,
-      recipientUserId: recipient._id,
-      recipientLightningAddress: recipient.lightningAddress,
-      objectKey,
-      uploadContentType: file.mimetype || 'application/octet-stream',
-      sizeBytes: file.size,
-      status: 'uploaded',
-      expiresAt,
-    });
-
-    return res.status(200).json({
-      ok: true,
-      attachment: stripAttachmentPayload(attachment),
-    });
-  } catch (error) {
-    console.error('Error uploading messaging attachment:', error);
     return res.status(500).json({ error: 'Internal Server Error' });
   }
 });
@@ -2193,7 +1911,7 @@ router.post('/messaging/attachments/mark-received', userAuthMiddleware, async (r
   }
 });
 
-async function handleMessagingV2LikeSend(req, res) {
+async function handleMessagingSend(req, res) {
   try {
     const userId = req.userId;
     const {
@@ -2220,9 +1938,7 @@ async function handleMessagingV2LikeSend(req, res) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    if (!hasResolvedMessagingIdentityBinding(sender, {
-      version: MESSAGING_IDENTITY_V2_SIGNATURE_VERSION,
-    })) {
+    if (!hasResolvedMessagingIdentityBinding(sender)) {
       return res.status(409).json({ error: 'Sender messaging v2 identity is not registered' });
     }
 
@@ -2291,18 +2007,14 @@ async function handleMessagingV2LikeSend(req, res) {
       return res.status(401).json({ error: 'Recipient messaging v2 binding is invalid' });
     }
 
-    const senderBinding = buildResolvedMessagingIdentityBindingRecord(sender, {
-      version: MESSAGING_IDENTITY_V2_SIGNATURE_VERSION,
-    });
+    const senderBinding = buildResolvedMessagingIdentityBindingRecord(sender);
 
     if (!isSealedSenderEnvelope) {
       if (!verifyMessagingIdentityBinding(normalizedSender.binding)) {
         return res.status(401).json({ error: 'Sender messaging v2 binding is invalid' });
       }
 
-      if (!resolvedBindingMatchesUser(sender, normalizedSender.binding, {
-        version: MESSAGING_IDENTITY_V2_SIGNATURE_VERSION,
-      })) {
+      if (!resolvedBindingMatchesUser(sender, normalizedSender.binding)) {
         return res.status(409).json({ error: 'Sender messaging v2 binding is stale, register again' });
       }
     }
@@ -2327,15 +2039,11 @@ async function handleMessagingV2LikeSend(req, res) {
       return res.status(blockError.status).json({ error: blockError.error });
     }
 
-    if (!hasResolvedMessagingIdentityBinding(recipientUser, {
-      version: MESSAGING_IDENTITY_V2_SIGNATURE_VERSION,
-    })) {
+    if (!hasResolvedMessagingIdentityBinding(recipientUser)) {
       return res.status(409).json({ error: 'Recipient messaging v2 is not active' });
     }
 
-    if (!resolvedBindingMatchesUser(recipientUser, recipientBinding, {
-      version: MESSAGING_IDENTITY_V2_SIGNATURE_VERSION,
-    })) {
+    if (!resolvedBindingMatchesUser(recipientUser, recipientBinding)) {
       return res.status(409).json({ error: 'Recipient messaging v2 binding is stale, resolve again' });
     }
 
@@ -2457,200 +2165,29 @@ async function handleMessagingV2LikeSend(req, res) {
       }
     }
 
-    console.error('Error sending messaging v2 message:', error);
+    console.error('Error sending messaging message:', error);
     return res.status(500).json({ error: 'Internal Server Error' });
   }
 }
 
-router.post('/messaging/v2/send', userAuthMiddleware, handleMessagingV2LikeSend);
-router.post('/messaging/v3/send', userAuthMiddleware, handleMessagingV2LikeSend);
+router.post('/messaging/v3/send', userAuthMiddleware, handleMessagingSend);
 
-router.post('/messaging/send', userAuthMiddleware, async (req, res) => {
+async function handleMessagingInbox(req, res) {
   try {
-    const userId = req.userId;
-    const {
-      clientMessageId,
-      recipientLightningAddress,
-      recipientMessagingPubkey,
-      ciphertext,
-      nonce,
-      senderEphemeralPubkey,
-      createdAtClient,
-      envelopeVersion,
-      messageType,
-      attachmentIds,
-      sameKeyRetryCount,
-    } = req.body || {};
-
-    const sender = await User.findById(userId).select('_id walletPubkey messagingPubkey lightningAddress');
-    if (!sender) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-
-    if (!sender.messagingPubkey) {
-      return res.status(409).json({ error: 'Sender messaging identity is not registered' });
-    }
-
-    if (!sender.lightningAddress) {
-      return res.status(409).json({ error: 'Sender lightningAddress is not set' });
-    }
-
-    const normalizedRecipientAddress = normalizeLightningAddress(recipientLightningAddress);
-
-    const errors = [];
-    if (!clientMessageId || typeof clientMessageId !== 'string') errors.push('clientMessageId is required');
-    if (!normalizedRecipientAddress) errors.push('recipientLightningAddress is required');
-    if (!recipientMessagingPubkey || typeof recipientMessagingPubkey !== 'string') errors.push('recipientMessagingPubkey is required');
-    if (!ciphertext || typeof ciphertext !== 'string') errors.push('ciphertext is required');
-    if (!nonce || typeof nonce !== 'string') errors.push('nonce is required');
-    if (!senderEphemeralPubkey || typeof senderEphemeralPubkey !== 'string') errors.push('senderEphemeralPubkey is required');
-    const normalizedMessageType = typeof messageType === 'string'
-      ? messageType.trim().toLowerCase()
-      : 'text';
-    if (!['text', 'payment_request', 'payment_request_paid', 'attachment', 'reaction'].includes(normalizedMessageType)) {
-      errors.push('messageType must be text, payment_request, payment_request_paid, attachment, or reaction');
-    }
-    const normalizedAttachmentIds = normalizeAttachmentIds(attachmentIds);
-    const normalizedSameKeyRetryCount = parseIntegerValue(sameKeyRetryCount);
-    if (normalizedMessageType === 'attachment' && !normalizedAttachmentIds.length) {
-      errors.push('attachmentIds is required for attachment messages');
-    }
-    if (normalizedMessageType !== 'attachment' && normalizedAttachmentIds.length) {
-      errors.push('attachmentIds can only be provided for attachment messages');
-    }
-    if (normalizedSameKeyRetryCount != null &&
-        (normalizedSameKeyRetryCount < 0 || normalizedSameKeyRetryCount > 1)) {
-      errors.push('sameKeyRetryCount must be 0 or 1');
-    }
-
-    if (errors.length) {
-      return res.status(400).json({ error: 'Invalid request', details: errors });
-    }
-
-    const recipient = await User.findOne({ lightningAddress: normalizedRecipientAddress })
-      .select('_id walletPubkey lightningAddress messagingPubkey');
-
-    if (!recipient) {
-      return res.status(404).json({ error: 'Recipient not found' });
-    }
-
-    if (String(recipient._id) === String(sender._id)) {
-      return res.status(400).json({ error: 'Cannot message yourself' });
-    }
-
-    const blockError = buildMessagingBlockError(await getMessagingBlockState({
-      requesterUserId: sender._id,
-      targetUserId: recipient._id,
-    }));
-    if (blockError) {
-      return res.status(blockError.status).json({ error: blockError.error });
-    }
-
-    if (!recipient.messagingPubkey) {
-      return res.status(409).json({ error: 'Recipient messaging is not active' });
-    }
-
-    if (recipient.messagingPubkey !== recipientMessagingPubkey.trim()) {
-      return res.status(409).json({ error: 'Recipient messaging key is stale, resolve again' });
-    }
-
-    let attachmentsToLink = [];
-    if (normalizedAttachmentIds.length) {
-      attachmentsToLink = await MessageAttachment.find({
-        _id: { $in: normalizedAttachmentIds.map((id) => new mongoose.Types.ObjectId(id)) },
-        senderUserId: sender._id,
-        recipientUserId: recipient._id,
-        recipientLightningAddress: recipient.lightningAddress,
-        status: 'uploaded',
-      }).select('_id');
-
-      if (attachmentsToLink.length !== normalizedAttachmentIds.length) {
-        return res.status(409).json({ error: 'One or more attachments are invalid, stale, or already linked' });
-      }
-    }
-
-    const expiresAt = new Date(Date.now() + MESSAGE_TTL_HOURS * 60 * 60 * 1000);
-
-    const directMessage = await DirectMessage.create({
-      senderUserId: sender._id,
-      senderWalletPubkey: sender.walletPubkey,
-      senderMessagingPubkey: sender.messagingPubkey,
-      senderLightningAddress: sender.lightningAddress || null,
-      recipientUserId: recipient._id,
-      recipientWalletPubkey: recipient.walletPubkey,
-      recipientLightningAddress: recipient.lightningAddress,
-      recipientMessagingPubkey: recipient.messagingPubkey,
-      clientMessageId: clientMessageId.trim(),
-      messageType: normalizedMessageType,
-      status: 'pending',
-      sameKeyRetryCount: normalizedSameKeyRetryCount ?? 0,
-      envelopeVersion: Number.isInteger(envelopeVersion) ? envelopeVersion : 1,
-      ciphertext: ciphertext.trim(),
-      nonce: nonce.trim(),
-      senderEphemeralPubkey: senderEphemeralPubkey.trim(),
-      createdAtClient: createdAtClient ? new Date(createdAtClient) : null,
-      expiresAt,
-    });
-
-    if (attachmentsToLink.length) {
-      await MessageAttachment.updateMany(
-        {
-          _id: { $in: attachmentsToLink.map((attachment) => attachment._id) },
-        },
-        {
-          $set: {
-            status: 'linked',
-            linkedMessageId: directMessage._id,
-            linkedClientMessageId: clientMessageId.trim(),
-          },
-        }
-      );
-    }
-
-    void sendPushNotificationsForDirectMessage({
-      directMessage,
-      recipientUserId: recipient._id,
-    });
-
-    return res.status(200).json({
-      ok: true,
-      message: stripDirectMessagePayload(directMessage),
-    });
-  } catch (error) {
-    if (error && error.code === 11000) {
-      const existing = await DirectMessage.findOne({
-        senderUserId: req.userId,
-        clientMessageId: String(req.body?.clientMessageId || '').trim(),
-      });
-
-      return res.status(200).json({
-        ok: true,
-        message: existing ? stripDirectMessagePayload(existing) : null,
-        deduped: true,
-      });
-    }
-
-    console.error('Error sending direct message:', error);
-    return res.status(500).json({ error: 'Internal Server Error' });
-  }
-});
-
-router.get('/messaging/inbox', userAuthMiddleware, async (req, res) => {
-  try {
-    const userId = req.userId;
-    const user = await User.findById(userId).select('_id messagingPubkey');
+    const user = await User.findById(req.userId).select('_id messagingPubkeyV2');
 
     if (!user) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    if (!user.messagingPubkey) {
-      return res.status(409).json({ error: 'Messaging identity is not registered' });
+    const acceptedRecipientMessagingPubkeys = buildAcceptedRecipientMessagingPubkeys(user);
+    if (!acceptedRecipientMessagingPubkeys.length) {
+      return res.status(409).json({ error: 'Messaging v2 identity is not registered' });
     }
 
     const messages = await DirectMessage.find({
       recipientUserId: user._id,
-      recipientMessagingPubkey: user.messagingPubkey,
+      recipientMessagingPubkey: { $in: acceptedRecipientMessagingPubkeys },
       status: 'pending',
       expiresAt: { $gt: new Date() },
     })
@@ -2665,54 +2202,20 @@ router.get('/messaging/inbox', userAuthMiddleware, async (req, res) => {
     console.error('Error fetching messaging inbox:', error);
     return res.status(500).json({ error: 'Internal Server Error' });
   }
-});
-
-async function handleMessagingV2LikeInbox(req, res) {
-  try {
-    const user = await User.findById(req.userId).select('_id messagingPubkey messagingPubkeyV2');
-
-    if (!user) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-
-    const acceptedRecipientMessagingPubkeys = buildAcceptedRecipientMessagingPubkeys(user, {
-      requireV2: true,
-    });
-    if (!acceptedRecipientMessagingPubkeys.length) {
-      return res.status(409).json({ error: 'Messaging v2 identity is not registered' });
-    }
-
-    const messages = await DirectMessage.find({
-      recipientUserId: user._id,
-      recipientMessagingPubkey: { $in: acceptedRecipientMessagingPubkeys },
-      status: 'pending',
-      expiresAt: { $gt: new Date() },
-    })
-      .sort({ createdAt: 1 })
-      .lean();
-
-    return res.status(200).json({
-      ok: true,
-      messages: messages.map(stripDirectMessagePayload),
-    });
-  } catch (error) {
-    console.error('Error fetching messaging v2 inbox:', error);
-    return res.status(500).json({ error: 'Internal Server Error' });
-  }
 }
 
-router.get('/messaging/v2/inbox', userAuthMiddleware, handleMessagingV2LikeInbox);
-router.get('/messaging/v3/inbox', userAuthMiddleware, handleMessagingV2LikeInbox);
+router.get('/messaging/v3/inbox', userAuthMiddleware, handleMessagingInbox);
 
-async function handleLegacyMessagingAck(req, res) {
+async function handleMessagingAck(req, res) {
   try {
-    const user = await User.findById(req.userId).select('_id messagingPubkey');
+    const user = await User.findById(req.userId).select('_id messagingPubkeyV2');
     if (!user) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    if (!user.messagingPubkey) {
-      return res.status(409).json({ error: 'Messaging identity is not registered' });
+    const acceptedRecipientMessagingPubkeys = buildAcceptedRecipientMessagingPubkeys(user);
+    if (!acceptedRecipientMessagingPubkeys.length) {
+      return res.status(409).json({ error: 'Messaging v2 identity is not registered' });
     }
 
     const objectIds = normalizeDirectMessageObjectIds(req.body?.messageIds);
@@ -2720,30 +2223,18 @@ async function handleLegacyMessagingAck(req, res) {
       return res.status(400).json({ error: 'No valid messageIds were provided' });
     }
 
-    const now = new Date();
-    const result = await DirectMessage.updateMany(
+    const result = await DirectMessage.deleteMany(
       {
         _id: { $in: objectIds },
         recipientUserId: user._id,
-        recipientMessagingPubkey: user.messagingPubkey,
+        recipientMessagingPubkey: { $in: acceptedRecipientMessagingPubkeys },
         status: 'pending',
-      },
-      {
-        $set: {
-          status: 'delivered',
-          deliveredAt: now,
-        },
-        $unset: {
-          ciphertext: '',
-          nonce: '',
-          senderEphemeralPubkey: '',
-        },
       }
     );
 
     return res.status(200).json({
       ok: true,
-      acknowledgedCount: result.modifiedCount || 0,
+      acknowledgedCount: result.deletedCount || 0,
     });
   } catch (error) {
     console.error('Error acknowledging direct messages:', error);
@@ -2751,71 +2242,16 @@ async function handleLegacyMessagingAck(req, res) {
   }
 }
 
-router.post('/messaging/ack', userAuthMiddleware, handleLegacyMessagingAck);
-
-async function handleMessagingV2LikeAck(req, res) {
-  try {
-    const user = await User.findById(req.userId).select('_id messagingPubkey messagingPubkeyV2');
-    if (!user) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-
-    const acceptedRecipientMessagingPubkeys = buildAcceptedRecipientMessagingPubkeys(user, {
-      requireV2: true,
-    });
-    if (!acceptedRecipientMessagingPubkeys.length) {
-      return res.status(409).json({ error: 'Messaging v2 identity is not registered' });
-    }
-
-    const objectIds = normalizeDirectMessageObjectIds(req.body?.messageIds);
-    if (!objectIds.length) {
-      return res.status(400).json({ error: 'No valid messageIds were provided' });
-    }
-
-    const now = new Date();
-    const result = await DirectMessage.updateMany(
-      {
-        _id: { $in: objectIds },
-        recipientUserId: user._id,
-        recipientMessagingPubkey: { $in: acceptedRecipientMessagingPubkeys },
-        status: 'pending',
-      },
-      {
-        $set: {
-          status: 'delivered',
-          deliveredAt: now,
-        },
-        $unset: {
-          ciphertext: '',
-          nonce: '',
-          senderEphemeralPubkey: '',
-        },
-      }
-    );
-
-    return res.status(200).json({
-      ok: true,
-      acknowledgedCount: result.modifiedCount || 0,
-    });
-  } catch (error) {
-    console.error('Error acknowledging direct v2 messages:', error);
-    return res.status(500).json({ error: 'Internal Server Error' });
-  }
-}
-
-router.post('/messaging/v2/ack', userAuthMiddleware, handleMessagingV2LikeAck);
-router.post('/messaging/v3/ack', userAuthMiddleware, handleMessagingV2LikeAck);
+router.post('/messaging/v3/ack', userAuthMiddleware, handleMessagingAck);
 
 router.post('/messaging/v3/rekey-required', userAuthMiddleware, async (req, res) => {
   try {
-    const user = await User.findById(req.userId).select('_id messagingPubkey messagingPubkeyV2');
+    const user = await User.findById(req.userId).select('_id messagingPubkeyV2');
     if (!user) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const acceptedRecipientMessagingPubkeys = buildAcceptedRecipientMessagingPubkeys(user, {
-      requireV2: true,
-    });
+    const acceptedRecipientMessagingPubkeys = buildAcceptedRecipientMessagingPubkeys(user);
     if (!acceptedRecipientMessagingPubkeys.length) {
       return res.status(409).json({ error: 'Messaging v2 identity is not registered' });
     }
@@ -2825,69 +2261,16 @@ router.post('/messaging/v3/rekey-required', userAuthMiddleware, async (req, res)
       return res.status(400).json({ error: 'No valid messageIds were provided' });
     }
 
-    const now = new Date();
-    const pendingMessages = await DirectMessage.find({
-      _id: { $in: objectIds },
+    const result = await markPendingMessagesRekeyRequired({
       recipientUserId: user._id,
-      recipientMessagingPubkey: { $in: acceptedRecipientMessagingPubkeys },
-      status: 'pending',
-    }).select('_id senderUserId recipientWalletPubkey');
-
-    if (!pendingMessages.length) {
-      return res.status(200).json({
-        ok: true,
-        updatedCount: 0,
-        resetAttachmentCount: 0,
-      });
-    }
-
-    const messageIdsToUpdate = pendingMessages.map((message) => message._id);
-    const [messageUpdateResult, attachmentResetResult] = await Promise.all([
-      DirectMessage.updateMany(
-        {
-          _id: { $in: messageIdsToUpdate },
-          status: 'pending',
-        },
-        {
-          $set: {
-            status: 'rekey_required',
-            rekeyRequiredAt: now,
-          },
-          $unset: {
-            ciphertext: '',
-            nonce: '',
-            senderEphemeralPubkey: '',
-          },
-        }
-      ),
-      MessageAttachment.updateMany(
-        {
-          linkedMessageId: { $in: messageIdsToUpdate },
-          recipientUserId: user._id,
-          status: 'linked',
-        },
-        {
-          $set: {
-            status: 'uploaded',
-          },
-          $unset: {
-            linkedMessageId: '',
-            linkedClientMessageId: '',
-          },
-        }
-      ),
-    ]);
-
-    void sendOutgoingStatusPushNotifications({
-      directMessages: pendingMessages,
-    }).catch((pushError) => {
-      console.warn('Failed to send messaging rekey-required push notifications:', pushError);
+      acceptedRecipientMessagingPubkeys,
+      objectIds,
     });
 
     return res.status(200).json({
       ok: true,
-      updatedCount: messageUpdateResult.modifiedCount || 0,
-      resetAttachmentCount: attachmentResetResult.modifiedCount || 0,
+      updatedCount: result.updatedCount,
+      resetAttachmentCount: result.resetAttachmentCount,
     });
   } catch (error) {
     console.error('Error marking messaging messages rekey-required:', error);
@@ -2897,14 +2280,12 @@ router.post('/messaging/v3/rekey-required', userAuthMiddleware, async (req, res)
 
 router.post('/messaging/v3/decrypt-failed', userAuthMiddleware, async (req, res) => {
   try {
-    const user = await User.findById(req.userId).select('_id messagingPubkey messagingPubkeyV2');
+    const user = await User.findById(req.userId).select('_id messagingPubkeyV2');
     if (!user) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const acceptedRecipientMessagingPubkeys = buildAcceptedRecipientMessagingPubkeys(user, {
-      requireV2: true,
-    });
+    const acceptedRecipientMessagingPubkeys = buildAcceptedRecipientMessagingPubkeys(user);
     if (!acceptedRecipientMessagingPubkeys.length) {
       return res.status(409).json({ error: 'Messaging v2 identity is not registered' });
     }
@@ -3044,10 +2425,10 @@ async function handleOutgoingMessagingStatuses(req, res) {
 
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 200);
 
-    const messages = await DirectMessage.find({ senderUserId: user._id })
-      .sort({ createdAt: -1 })
-      .limit(limit)
-      .lean();
+    const messages = await loadOutgoingStatusMessages({
+      senderUserId: user._id,
+      limit,
+    });
 
     return res.status(200).json({
       ok: true,
@@ -3059,7 +2440,6 @@ async function handleOutgoingMessagingStatuses(req, res) {
   }
 }
 
-router.get('/messaging/outgoing-statuses', userAuthMiddleware, handleOutgoingMessagingStatuses);
 router.get('/messaging/v3/outgoing-statuses', userAuthMiddleware, handleOutgoingMessagingStatuses);
 
 module.exports = router;

@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <title>Thank you — Split</title>
+
+  <!-- Icons -->
+  <link rel="apple-touch-icon" sizes="180x180" href="/Split-images/App-icon.png" />
+  <link rel="apple-touch-icon-precomposed" sizes="180x180" href="/Split-images/App-icon.png" />
+
+  <!-- CSS (page-specific) -->
+  <link rel="stylesheet" href="/css/Prospect-submitted.css" type="text/css" />
+</head>
+
+<body>
+  <!-- Simple top brand bar -->
+  <header class="nav">
+    <a href="/" class="brand">
+      <img src="/Split-images/token_logo.png" alt="Split logo" class="brand__logo" />
+      <span class="brand__name">Split</span>
+    </a>
+  </header>
+
+  <main class="thankyou">
+    <section class="thankyou__card">
+      <h1 class="thankyou__headline">Thanks for reaching out.</h1>
+      <p class="thankyou__subheadline">
+        Your request has been successfully submitted. We’ll review your information and follow up shortly
+        to schedule your demo.
+      </p>
+
+      <div class="thankyou__details">
+        <h2>What happens next?</h2>
+        <ul>
+          <li>We confirm your business details.</li>
+          <li>We reach out by email to coordinate a quick call or on-site visit.</li>
+          <li>We walk you through how 1% ACH and Split’s rewards experience can work at your location.</li>
+        </ul>
+      </div>
+
+      <div class="thankyou__actions">
+        <a href="/" class="btn btn--primary">Back to Split</a>
+        <a href="mailto:taylor@split-loyalty.com" class="btn btn--ghost">Email us directly</a>
+      </div>
+
+      <p class="thankyou__footnote">
+        Based in Washington, DC — built for local, independent businesses.
+      </p>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer__inner">
+      <span class="footer__copy">© <span id="year"></span> Split.</span>
+      <nav class="footer__links">
+        <a class="footer-link" href="/User-agreement" target="_blank" rel="noopener">User Agreement</a>
+        <span class="dot">•</span>
+        <a class="footer-link" href="/Privacy-policy" target="_blank" rel="noopener">Privacy Policy</a>
+      </nav>
+    </div>
+
+    <!-- LinkedIn Insight Tag (kept from previous view) -->
+    <script type="text/javascript">
+      _linkedin_partner_id = "6680722";
+      window._linkedin_data_partner_ids = window._linkedin_data_partner_ids || [];
+      window._linkedin_data_partner_ids.push(_linkedin_partner_id);
+    </script>
+    <script type="text/javascript">
+      (function(l) {
+        if (!l) {
+          window.lintrk = function(a, b) { window.lintrk.q.push([a, b]); };
+          window.lintrk.q = [];
+        }
+        var s = document.getElementsByTagName("script")[0];
+        var b = document.createElement("script");
+        b.type = "text/javascript";
+        b.async = true;
+        b.src = "https://snap.licdn.com/li.lms-analytics/insight.min.js";
+        s.parentNode.insertBefore(b, s);
+      })(window.lintrk);
+    </script>
+    <noscript>
+      <img height="1" width="1" style="display:none;" alt=""
+           src="https://px.ads.linkedin.com/collect/?pid=6680722&amp;fmt=gif" />
+    </noscript>
+  </footer>
+
+  <script>
+    // Set current year in footer
+    document.getElementById('year').textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>

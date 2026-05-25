@@ -5,7 +5,14 @@ const MessageAttachment = require('../models/MessageAttachment');
 const s3Client = require('../integrations/r2');
 
 const RECEIPT_RETENTION_DAYS = 7;
+const DELIVERED_RECEIPT_RETENTION_HOURS = 24;
 const ATTACHMENT_TERMINAL_STATUSES = ['received', 'deleted', 'expired'];
+const NON_DELIVERED_RECEIPT_STATUSES = [
+  'rekey_required',
+  'same_key_retry_required',
+  'failed_same_key',
+  'undelivered',
+];
 
 async function expirePendingMessages({ now = new Date(), directMessageModel = DirectMessage } = {}) {
 
@@ -36,20 +43,26 @@ async function pruneOldReceipts({
   now = new Date(),
   directMessageModel = DirectMessage,
   retentionDays = RECEIPT_RETENTION_DAYS,
+  deliveredReceiptRetentionHours = DELIVERED_RECEIPT_RETENTION_HOURS,
 } = {}) {
   const cutoff = new Date(now.getTime() - retentionDays * 24 * 60 * 60 * 1000);
+  const deliveredCutoff = new Date(now.getTime() - deliveredReceiptRetentionHours * 60 * 60 * 1000);
 
   const result = await directMessageModel.deleteMany({
-    status: {
-      $in: [
-        'delivered',
-        'rekey_required',
-        'same_key_retry_required',
-        'failed_same_key',
-        'undelivered',
-      ],
-    },
-    updatedAt: { $lte: cutoff },
+    $or: [
+      {
+        status: 'delivered',
+        $or: [
+          { expiresAt: { $lte: now } },
+          { deliveredAt: { $lte: deliveredCutoff } },
+          { updatedAt: { $lte: deliveredCutoff } },
+        ],
+      },
+      {
+        status: { $in: NON_DELIVERED_RECEIPT_STATUSES },
+        updatedAt: { $lte: cutoff },
+      },
+    ],
   });
 
   if (result.deletedCount) {
@@ -164,6 +177,8 @@ function startMessagingRelayCleanup() {
 
 module.exports = {
   ATTACHMENT_TERMINAL_STATUSES,
+  DELIVERED_RECEIPT_RETENTION_HOURS,
+  NON_DELIVERED_RECEIPT_STATUSES,
   deleteAttachmentObjectIfPresent,
   expirePendingAttachments,
   startMessagingRelayCleanup,

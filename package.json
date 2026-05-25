@@ -15,10 +15,8 @@
     "@aws-sdk/client-s3": "^3.876.0",
     "@ngrok/ngrok": "^1.5.2",
     "@noble/secp256k1": "^1.7.1",
-    "archiver": "^7.0.1",
     "axios": "^1.11.0",
     "bcrypt": "^6.0.0",
-    "big.js": "^7.0.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^17.2.1",
@@ -28,11 +26,8 @@
     "mongoose": "^8.18.0",
     "multer": "^2.0.2",
     "node-cron": "^4.2.1",
-    "pdf-lib": "^1.17.1",
-    "pdfkit": "^0.18.0",
     "qrcode": "^1.5.4",
-    "sharp": "^0.34.3",
-    "stripe": "^20.2.0"
+    "sharp": "^0.34.3"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"

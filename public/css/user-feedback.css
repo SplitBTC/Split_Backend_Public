@@ -1,0 +1,166 @@
+/* Base – follow Landing.css conventions */
+body {
+  margin: 0;
+
+  /* Safe-area padding for notches/chrome */
+  padding: calc(16px + env(safe-area-inset-top))
+           env(safe-area-inset-right)
+           env(safe-area-inset-bottom)
+           env(safe-area-inset-left);
+
+  background-color: white;
+  color: rgb(19, 43, 98);
+  font-family: 'Inter', sans-serif;
+
+  /* Start content from top instead of centering */
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+
+  /* Avoid 100vh clipping issues on mobile */
+  min-height: 100svh;
+  text-align: center;
+}
+
+/* Use modern dynamic viewport units when available */
+@supports (height: 100dvh) {
+  body { min-height: 100dvh; }
+}
+
+.landing-container {
+  padding: 20px;
+}
+
+.logo-container {
+  margin-bottom: 30px;
+}
+
+.logo {
+  padding-top: 0; /* fixed: removed extra top padding */
+  width: 250px;
+  height: auto;
+}
+
+/* Headings */
+.headline {
+  max-width: 50ch;
+  font-size: 2rem;
+  font-weight: 800;
+  margin-bottom: 10px;
+}
+
+.headline2 {
+  max-width: 50ch;
+  font-size: 2rem;
+  font-weight: 800;
+  margin-bottom: 10px;
+  color: rgb(190, 50, 135);
+}
+
+.subtext {
+  font-size: 1rem;
+  font-weight: 700;
+  color: rgb(190, 50, 135);
+  margin-bottom: 30px;
+  padding-bottom: 10px;
+}
+
+/* Form */
+.feedback-form {
+  display: grid;
+  gap: 14px;
+  width: min(720px, 92%);
+  margin: 18px auto 0;
+  text-align: left;
+}
+
+.q-label {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: rgb(19, 43, 98);
+  margin-top: 6px;
+}
+
+.feedback-form textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 120px;
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  font-size: 16px;
+  line-height: 1.4;
+  outline: none;
+}
+
+.feedback-form textarea:focus {
+  border-color: rgb(190, 50, 135);
+  box-shadow: 0 0 0 3px rgba(190, 50, 135, 0.12);
+}
+
+/* Button */
+.submit-button {
+  padding: 12px 16px;
+  border: none;
+  border-radius: 12px;
+  font-size: 16px;
+  cursor: pointer;
+  background: #aa367c;
+  color: #fff;
+  display: block;
+  margin: 8px auto 0;
+  transition: transform 0.1s ease-in-out;
+}
+
+.submit-button:active {
+  transform: translateY(1px);
+}
+
+/* Footer links */
+.footer-links {
+  margin-top: 36px;
+}
+
+.footer-link {
+  color: rgb(19, 43, 98);
+  text-decoration: none;
+  margin: 0 10px;
+  font-size: 0.9rem;
+}
+
+.footer-link:hover {
+  text-decoration: underline;
+}
+
+/* Mobile adjustments */
+@media screen and (max-width: 600px) {
+  body {
+    height: auto; /* prevent clipping on small screens */
+    flex-direction: column;
+  }
+
+  .logo {
+    width: 150px;
+  }
+
+  .headline {
+    font-size: 1.1rem;
+    line-height: 1.3;
+    margin-bottom: 12px;
+  }
+
+  .subtext {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: rgb(19, 43, 98);
+    line-height: 1.4;
+    margin-bottom: 24px;
+    padding-bottom: 0;
+  }
+
+  .submit-button {
+    width: 100%;
+    padding: 14px;
+    font-size: 0.95rem;
+  }
+}

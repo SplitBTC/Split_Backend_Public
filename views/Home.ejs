@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <title>Split | Bitcoin</title>
+  <link rel="stylesheet" href="/css/Home.css" type="text/css" />
+</head>
+
+<body data-page-theme="white">
+  <%
+    const appStoreUrl = (typeof APP_STORE_URL !== 'undefined' && APP_STORE_URL)
+      ? APP_STORE_URL
+      : 'https://apps.apple.com/app/idYOUR_APP_ID';
+    const playStoreUrl = (typeof PLAY_STORE_URL !== 'undefined' && PLAY_STORE_URL)
+      ? PLAY_STORE_URL
+      : 'https://play.google.com/store/apps/details?id=com.splitloyalty.android&pcampaignid=web_share';
+  %>
+
+  <main class="home-page">
+    <header class="site-header" aria-label="Split header">
+      <a class="brand-tile" href="/Home" aria-label="Split home">
+        <img src="/Split-images/split-logo-black-white-tile.png" alt="Split" />
+      </a>
+
+      <div class="header-actions">
+        <a
+          class="header-cta"
+          href="<%= appStoreUrl %>"
+          data-app-store-url="<%= appStoreUrl %>"
+          data-play-store-url="<%= playStoreUrl %>"
+        >
+          Get Started
+        </a>
+
+        <a
+          class="github-cta"
+          href="https://github.com/SplitBTC"
+          target="_blank"
+          rel="noopener"
+          aria-label="View SplitBTC on GitHub"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M12 1.8C6.35 1.8 1.8 6.46 1.8 12.25c0 4.62 2.92 8.54 6.97 9.93.5.1.68-.22.68-.49 0-.24-.01-1.04-.02-1.9-2.84.63-3.44-1.25-3.44-1.25-.46-1.2-1.14-1.52-1.14-1.52-.93-.65.07-.64.07-.64 1.03.07 1.57 1.08 1.57 1.08.91 1.6 2.39 1.14 2.98.87.09-.68.36-1.14.65-1.4-2.27-.26-4.65-1.16-4.65-5.15 0-1.14.4-2.07 1.06-2.8-.11-.26-.46-1.33.1-2.76 0 0 .86-.28 2.82 1.07.82-.23 1.7-.35 2.57-.35.87 0 1.75.12 2.57.35 1.96-1.35 2.82-1.07 2.82-1.07.56 1.43.21 2.5.1 2.76.66.73 1.06 1.66 1.06 2.8 0 4-2.39 4.88-4.66 5.15.37.33.7.97.7 1.95 0 1.41-.01 2.55-.01 2.9 0 .27.18.59.69.49 4.04-1.39 6.95-5.31 6.95-9.93C22.2 6.46 17.65 1.8 12 1.8Z" />
+          </svg>
+        </a>
+      </div>
+    </header>
+
+    <section class="landing-section landing-section--intro" data-theme="white" aria-label="Bitcoin spending with Split">
+      <div class="section-copy">
+        <h1 class="section-title">
+          <span class="title-line">
+            <img class="bitcoin-wordmark" src="/Split-images/bitcoin-token.png" alt="Bitcoin" />
+            <span>is money.</span>
+          </span>
+          <span class="title-line">This is how you spend it.</span>
+        </h1>
+
+        <p class="section-subtext">
+          Split makes it easy to make payments, find merchants, manage your funds, and collect Bitcoin rewards.
+        </p>
+      </div>
+
+      <div class="section-media" aria-hidden="true">
+        <div class="phone-frame">
+          <img src="/Split-images/split-wallet-screen.png" alt="" />
+        </div>
+      </div>
+    </section>
+
+    <section class="landing-section landing-section--rewards" data-theme="blue" aria-label="Bitcoin rewards with Split">
+      <div class="section-copy">
+        <h1 class="section-title">
+          <span class="title-line">
+            <span>Earn</span>
+            <img class="bitcoin-wordmark" src="/Split-images/bitcoin-token.png" alt="Bitcoin" />
+            <span>when</span>
+          </span>
+          <span class="title-line">
+            <span>you spend</span>
+            <img class="bitcoin-wordmark" src="/Split-images/bitcoin-token.png" alt="Bitcoin" />
+          </span>
+        </h1>
+
+        <p class="section-subtext">
+          Each month we distribute Bitcoin rewards to our users for spreading Bitcoin to the merchants they love. Earn sats just for living your life.
+          <button class="rewards-pill-button" type="button" data-home-rewards-modal-open aria-label="View Bitcoin rewards program">
+            <img src="/Split-images/bitcoin-token.png" alt="" aria-hidden="true" />
+            <span>Rewards Program</span>
+          </button>
+        </p>
+      </div>
+
+      <div class="section-media" aria-hidden="true">
+        <div class="phone-frame phone-frame--rewards">
+          <img src="/Split-images/split-rewards-screen.png" alt="" />
+        </div>
+      </div>
+    </section>
+
+    <section class="landing-section landing-section--promos" data-theme="pink" aria-label="Bitcoin merchant promotions with Split">
+      <div class="section-copy">
+        <h1 class="section-title">
+          <span class="title-line">
+            <span>Exclusive</span>
+          </span>
+          <span class="title-line">
+            <img class="bitcoin-wordmark" src="/Split-images/bitcoin-token.png" alt="Bitcoin" />
+            <span>promos</span>
+          </span>
+        </h1>
+
+        <p class="section-subtext">
+          Take advantage of monthly deals offered by Bitcoin Merchants who are grateful that you pay them with sats.
+        </p>
+      </div>
+
+      <div class="section-media" aria-hidden="true">
+        <div class="phone-frame phone-frame--promos">
+          <img src="/Split-images/split-promos-screen.png" alt="" />
+        </div>
+      </div>
+    </section>
+
+    <section class="landing-section landing-section--messages" data-theme="neutral" aria-label="Encrypted Lightning messaging with Split">
+      <div class="section-copy">
+        <h1 class="section-title">
+          <span class="title-line">Lightning address messaging</span>
+        </h1>
+        <p class="section-subtext">
+          Send or receive encrypted messages or Bitcoin with your friends directly in a chat from your lightning address.
+        </p>
+      </div>
+
+      <div class="section-media" aria-hidden="true">
+        <div class="phone-frame phone-frame--messages">
+          <img src="/Split-images/split-messages-screen.png" alt="" />
+        </div>
+      </div>
+    </section>
+
+    <section class="landing-section landing-section--buy" data-theme="gradient" aria-label="Buy Bitcoin with Split">
+      <div class="section-copy">
+        <h1 class="section-title">
+          <span class="title-line">
+            <span>Buy</span>
+            <img class="bitcoin-wordmark" src="/Split-images/bitcoin-token.png" alt="Bitcoin" />
+            <span>and</span>
+          </span>
+          <span class="title-line">track its performance.</span>
+        </h1>
+
+        <p class="section-subtext">
+          Buy Bitcoin with no fees via our Cash App integration, and have it dropped in your wallet instantly.
+        </p>
+      </div>
+
+      <div class="section-media" aria-hidden="true">
+        <div class="phone-frame phone-frame--buy">
+          <img src="/Split-images/split-buy-bitcoin-screen.png" alt="" />
+        </div>
+      </div>
+    </section>
+
+    <section class="landing-section landing-section--lightning" data-theme="deep-blue" aria-label="Connect your Lightning node with Split">
+      <div class="section-copy">
+        <h1 class="section-title">
+          <span class="title-line">Your own Node or</span>
+          <span class="title-line">NWC wallet.</span>
+        </h1>
+
+        <p class="section-subtext">
+          Take advantage of everything Split has to offer without sacrificing your sovereignty. Connect as many nodes or wallets as you'd like.
+        </p>
+      </div>
+
+      <div class="section-media" aria-hidden="true">
+        <div class="phone-frame phone-frame--lightning">
+          <img src="/Split-images/split-lightning-connections-screen.png" alt="" />
+        </div>
+      </div>
+    </section>
+
+    <section class="landing-section landing-section--events" data-theme="teal" aria-label="Local Bitcoin events with Split">
+      <div class="section-copy">
+        <h1 class="section-title">
+          <span class="title-line">
+            <span>Local</span>
+            <img class="bitcoin-wordmark" src="/Split-images/bitcoin-token.png" alt="Bitcoin" />
+            <span>events</span>
+          </span>
+        </h1>
+
+        <p class="section-subtext">
+          Attend Bitcoin events and connect with your Bitcoin community.
+          <a class="events-pill-link" href="/bitcoin-events" aria-label="View Bitcoin events">
+            <img src="/Split-images/bitcoin-token.png" alt="" aria-hidden="true" />
+            <span>Events</span>
+          </a>
+        </p>
+      </div>
+
+      <div class="section-media" aria-hidden="true">
+        <div class="phone-frame phone-frame--events">
+          <img src="/Split-images/split-events-screen.png" alt="" />
+        </div>
+      </div>
+    </section>
+
+    <section class="final-cta-section" data-theme="black" aria-label="Get started with Split">
+      <h2>Fix the money. Fix the world.</h2>
+      <a
+        class="final-cta-button"
+        href="<%= appStoreUrl %>"
+        data-app-store-url="<%= appStoreUrl %>"
+        data-play-store-url="<%= playStoreUrl %>"
+      >
+        Get Started
+      </a>
+    </section>
+
+    <div class="home-rewards-modal" data-home-rewards-modal hidden>
+      <button class="home-rewards-modal__backdrop" type="button" aria-label="Close rewards program details" data-home-rewards-modal-close></button>
+
+      <section
+        class="home-rewards-modal__panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="home-rewards-modal-title"
+      >
+        <button class="home-rewards-modal__close" type="button" aria-label="Close rewards program details" data-home-rewards-modal-close>
+          <span aria-hidden="true">×</span>
+        </button>
+
+        <p class="home-rewards-modal__kicker">Our Bitcoin Rewards Program</p>
+        <h2 id="home-rewards-modal-title">
+          <img src="/Split-images/bitcoin-token.png" alt="Bitcoin" />
+          <span>Rewards</span>
+        </h2>
+
+        <div class="home-rewards-modal__copy">
+          <p>Each month, Split sets aside Bitcoin in a rewards pool that's paid out at the end of the month.</p>
+          <p>You earn a share of the Bitcoin pool based on the Bitcoin you spend with verified merchants.</p>
+          <p>You get credited for all of the Bitcoin you spend with verified merchants.</p>
+          <p>Your Bitcoin reward is determined by your percentage of spend relative to the platform. If you account for 5% of the platform's reward eligible spending, you receive 5% of the Bitcoin rewards pot.</p>
+          <p>As reward eligible spend grows, we will grow the size of the Bitcoin rewards pool. Our goal is simple: Drive real world Bitcoin transactions.</p>
+          <p>If you have any questions, comments, suggestions, or concerns please reach out to taylor@split-loyalty.com</p>
+        </div>
+
+        <article class="home-rewards-modal__note">
+          <div class="home-rewards-modal__note-icon">
+            <img src="/Split-images/bitcoin-token.png" alt="" aria-hidden="true" />
+          </div>
+          <div>
+            <h3>Reward Eligible Spend</h3>
+            <p>Rewards are based on Bitcoin spent with verified merchants.</p>
+          </div>
+        </article>
+
+      </section>
+    </div>
+  </main>
+
+  <script>
+    const getStartedLinks = document.querySelectorAll("[data-app-store-url][data-play-store-url]");
+
+    getStartedLinks.forEach((link) => link.addEventListener("click", (event) => {
+      event.preventDefault();
+
+      const userAgent = navigator.userAgent || navigator.vendor || "";
+      const isAndroid = /android/i.test(userAgent);
+      const isIOS = /iPad|iPhone|iPod/.test(userAgent)
+        || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+      const targetUrl = isAndroid
+        ? link.dataset.playStoreUrl
+        : link.dataset.appStoreUrl;
+
+      window.location.href = targetUrl;
+    }));
+
+    const themedSections = document.querySelectorAll("[data-theme]");
+    const body = document.body;
+    const rewardsModal = document.querySelector("[data-home-rewards-modal]");
+    const rewardsModalOpen = document.querySelector("[data-home-rewards-modal-open]");
+    const rewardsModalCloseButtons = document.querySelectorAll("[data-home-rewards-modal-close]");
+
+    function openRewardsModal() {
+      if (!rewardsModal) return;
+      rewardsModal.hidden = false;
+      body.classList.add("is-modal-open");
+      rewardsModal.querySelector(".home-rewards-modal__close")?.focus();
+    }
+
+    function closeRewardsModal() {
+      if (!rewardsModal) return;
+      rewardsModal.hidden = true;
+      body.classList.remove("is-modal-open");
+      rewardsModalOpen?.focus();
+    }
+
+    rewardsModalOpen?.addEventListener("click", openRewardsModal);
+    rewardsModalCloseButtons.forEach((button) => {
+      button.addEventListener("click", closeRewardsModal);
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && rewardsModal && !rewardsModal.hidden) {
+        closeRewardsModal();
+      }
+    });
+
+    if ("IntersectionObserver" in window && themedSections.length > 0) {
+      const themeObserver = new IntersectionObserver((entries) => {
+        const visibleEntry = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+
+        if (visibleEntry?.target?.dataset.theme) {
+          body.dataset.pageTheme = visibleEntry.target.dataset.theme;
+        }
+      }, {
+        rootMargin: "-34% 0px -44% 0px",
+        threshold: [0, 0.5, 1],
+      });
+
+      themedSections.forEach((section) => themeObserver.observe(section));
+    }
+  </script>
+</body>
+</html>

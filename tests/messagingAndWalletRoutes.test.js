@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('http');
+const path = require('path');
 const mongoose = require('mongoose');
 
 process.env.secretKey = process.env.secretKey || 'split-backend-test-secret';
@@ -14,26 +15,27 @@ const UserBlock = require('../models/UserBlock');
 const DirectMessage = require('../models/DirectMessage');
 const MessageAttachment = require('../models/MessageAttachment');
 const MessagingDeviceRegistration = require('../models/MessagingDeviceRegistration');
-const BitcoinPurchase = require('../models/BitcoinPurchase');
-const MoonPayPurchase = require('../models/MoonPayPurchase');
-const POSFeedPost = require('../models/POSFeedPost');
-const POSFeedPostReport = require('../models/POSFeedPostReport');
-const RewardSpend = require('../models/RewardSpend');
+const MessagingBindingLog = require('../models/MessagingBindingLog');
+const MessagingDirectoryState = require('../models/MessagingDirectoryState');
+const PlatformWallet = require('../models/PlatformWallet');
+const RewardPayoutAllocation = require('../models/RewardPayoutAllocation');
+const RewardSpendPayment = require('../models/RewardSpendPayment');
+const MerchantPubKey = require('../models/MerchantPubKey');
 const s3Client = require('../integrations/r2');
 const sessionHelper = require('../auth/sessionHelper');
-const { createMoonPayStateToken, verifyMoonPayStateToken } = require('../payments/moonPayHelpers');
 const iOSEndPoints = require('../routes/iOSEndPoints');
 const MessageEndPoints = require('../routes/MessageEndPoints');
-const POSFeedEndpoints = require('../routes/POSFeedEndpoints');
+const { getRewardsMinimumVersion } = iOSEndPoints;
 
 function createJsonApp() {
   const app = express();
   app.use(express.urlencoded({ extended: true }));
   app.use(express.json());
   app.use(cookieParser());
+  app.set('view engine', 'ejs');
+  app.set('views', path.join(__dirname, '..', 'views'));
   app.use(iOSEndPoints);
   app.use(MessageEndPoints);
-  app.use(POSFeedEndpoints);
   return app;
 }
 
@@ -108,23 +110,16 @@ function querySelectLeanResult(value) {
   };
 }
 
-function queryLeanResult(value) {
-  return {
-    lean: async () => value,
-  };
-}
-
 function buildUser(overrides = {}) {
   return {
     _id: 'user-1',
     walletPubkey: '02aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
     lightningAddress: null,
-    messagingPubkey: null,
-    messagingIdentitySignature: null,
-    messagingIdentitySignatureVersion: null,
-    messagingIdentitySignedAt: null,
-    messagingIdentityUpdatedAt: null,
     messagingPubkeyV2: null,
+    messagingIdentityV2Signature: null,
+    messagingIdentityV2SignatureVersion: null,
+    messagingIdentityV2SignedAt: null,
+    messagingIdentityV2UpdatedAt: null,
     saveCalls: 0,
     async save() {
       this.saveCalls += 1;
@@ -132,6 +127,65 @@ function buildUser(overrides = {}) {
     },
     ...overrides,
   };
+}
+
+function querySortSelectAwaitableResult(value) {
+  return {
+    sort() {
+      return this;
+    },
+    select: async () => value,
+    then(resolve, reject) {
+      return Promise.resolve(value).then(resolve, reject);
+    },
+  };
+}
+
+function createDirectoryModelPatches({ entryCreatedAt = new Date('2026-01-03T00:00:00.000Z') } = {}) {
+  const bindingLogEntries = [];
+  let directoryStateUpdateCalls = 0;
+
+  return [
+    {
+      target: MessagingBindingLog,
+      key: 'findOne',
+      value: () => querySortSelectAwaitableResult(
+        bindingLogEntries.length
+          ? bindingLogEntries[bindingLogEntries.length - 1]
+          : null
+      ),
+    },
+    {
+      target: MessagingBindingLog,
+      key: 'create',
+      value: async (payload) => {
+        const entry = {
+          _id: `binding-log-${bindingLogEntries.length + 1}`,
+          createdAt: entryCreatedAt,
+          ...payload,
+        };
+        bindingLogEntries.push(entry);
+        return entry;
+      },
+    },
+    {
+      target: MessagingBindingLog,
+      key: 'find',
+      value: () => querySortSelectAwaitableResult(bindingLogEntries),
+    },
+    {
+      target: MessagingDirectoryState,
+      key: 'findOneAndUpdate',
+      value: async () => {
+        directoryStateUpdateCalls += 1;
+        if (directoryStateUpdateCalls === 2) {
+          return { lastLeafIndex: bindingLogEntries.length };
+        }
+
+        return {};
+      },
+    },
+  ];
 }
 
 function withPatchedMethods(patches, fn) {
@@ -180,7 +234,7 @@ test('POST /lightning-address saves a normalized address for a user who does not
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          lightningAddress: '  Donate@Example.com ',
+          lightningAddress: '  Donate@Split-Loyalty.com ',
         }),
       });
 
@@ -189,8 +243,8 @@ test('POST /lightning-address saves a normalized address for a user who does not
       assert.equal(response.status, 200);
       assert.equal(body.ok, true);
       assert.equal(body.didUpdate, true);
-      assert.equal(body.lightningAddress, 'donate@example.com');
-      assert.equal(user.lightningAddress, 'donate@example.com');
+      assert.equal(body.lightningAddress, 'donate@split-loyalty.com');
+      assert.equal(user.lightningAddress, 'donate@split-loyalty.com');
       assert.equal(user.saveCalls, 1);
     });
   });
@@ -198,7 +252,7 @@ test('POST /lightning-address saves a normalized address for a user who does not
 
 test('POST /lightning-address is a no-op when the user already has one', async (t) => {
   const user = buildUser({
-    lightningAddress: 'donate@example.com',
+    lightningAddress: 'donate@split-loyalty.com',
   });
 
   await withPatchedMethods([
@@ -212,7 +266,7 @@ test('POST /lightning-address is a no-op when the user already has one', async (
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          lightningAddress: 'other@example.com',
+          lightningAddress: 'other@split-loyalty.com',
         }),
       });
 
@@ -220,7 +274,7 @@ test('POST /lightning-address is a no-op when the user already has one', async (
 
       assert.equal(response.status, 200);
       assert.equal(body.didUpdate, false);
-      assert.equal(body.lightningAddress, 'donate@example.com');
+      assert.equal(body.lightningAddress, 'donate@split-loyalty.com');
       assert.equal(user.saveCalls, 0);
     });
   });
@@ -232,7 +286,7 @@ test('GET /rewards-version-check returns the enforced minimum version by default
     const body = await response.json();
 
     assert.equal(response.status, 200);
-    assert.equal(body.minimumVersion, '3.6.1');
+    assert.equal(body.minimumVersion, getRewardsMinimumVersion());
   });
 });
 
@@ -242,7 +296,7 @@ test('GET /rewards-version-check returns the enforced iOS minimum version when p
     const body = await response.json();
 
     assert.equal(response.status, 200);
-    assert.equal(body.minimumVersion, '3.6.1');
+    assert.equal(body.minimumVersion, getRewardsMinimumVersion('ios'));
   });
 });
 
@@ -252,13 +306,192 @@ test('GET /rewards-version-check returns the enforced Android minimum version wh
     const body = await response.json();
 
     assert.equal(response.status, 200);
-    assert.equal(body.minimumVersion, '0.1.1');
+    assert.equal(body.minimumVersion, getRewardsMinimumVersion('android'));
   });
 });
 
-test('POST /messaging-key rejects an invalid wallet signature', async (t) => {
+test('GET /v1/RewardStats returns lifetime paid rewards from RewardPayoutAllocation', async (t) => {
+  const userId = new mongoose.Types.ObjectId();
+  const aggregateCalls = [];
+
+  await withPatchedMethods([
+    { target: User, key: 'findById', value: () => queryResult({ _id: userId }) },
+    {
+      target: PlatformWallet,
+      key: 'findOne',
+      value: () => querySelectLeanResult({ balanceSats: 250_000 }),
+    },
+    {
+      target: RewardSpendPayment,
+      key: 'aggregate',
+      value: async (pipeline) => {
+        aggregateCalls.push({ model: 'RewardSpendPayment', pipeline });
+        const match = pipeline[0]?.$match || {};
+
+        if (match.userId) {
+          assert.equal(String(match.userId), String(userId));
+          return [{
+            _id: userId,
+            rewardSpendCents: 2_500,
+            transactions: 2,
+          }];
+        }
+
+        return [{
+          _id: match.monthKey,
+          rewardSpendCents: 10_000,
+          transactions: 8,
+        }];
+      },
+    },
+    {
+      target: RewardPayoutAllocation,
+      key: 'aggregate',
+      value: async (pipeline) => {
+        aggregateCalls.push({ model: 'RewardPayoutAllocation', pipeline });
+        assert.deepEqual(pipeline[0]?.$match, {
+          userId: new mongoose.Types.ObjectId(String(userId)),
+          paid: true,
+        });
+
+        return [{
+          _id: null,
+          lifetimeEarningsSats: 42_123,
+        }];
+      },
+    },
+  ], async () => {
+    await maybeWithServer(t, async ({ baseUrl }) => {
+      const response = await fetch(`${baseUrl}/v1/RewardStats`, {
+        headers: {
+          Cookie: authCookie(String(userId)),
+        },
+      });
+      const body = await response.json();
+
+      assert.equal(response.status, 200);
+      assert.equal(body.monthlyPot.sats, 250_000);
+      assert.equal(body.platform.rewardSpendCents, 10_000);
+      assert.equal(body.platform.transactions, 8);
+      assert.equal(body.user.rewardSpendCents, 2_500);
+      assert.equal(body.user.transactions, 2);
+      assert.equal(body.stats.shareBps, 2_500);
+      assert.equal(body.stats.projectedEarningsSats, 62_500);
+      assert.equal(body.stats.lifetimeEarningsSats, 42_123);
+      assert.equal(
+        aggregateCalls.filter((call) => call.model === 'RewardPayoutAllocation').length,
+        1
+      );
+    });
+  });
+});
+
+test('POST /RewardsCheck returns reward eligibility for known merchant pubkeys', async (t) => {
+  const user = buildUser({ _id: 'reward-check-user-1' });
+  const merchantQueries = [];
+
+  await withPatchedMethods([
+    { target: User, key: 'findById', value: () => queryResult(user) },
+    {
+      target: MerchantPubKey,
+      key: 'findOne',
+      value: (query) => {
+        merchantQueries.push(query);
+        return querySelectLeanResult({ _id: 'merchant-pubkey-1' });
+      },
+    },
+  ], async () => {
+    await maybeWithServer(t, async ({ baseUrl }) => {
+      const response = await fetch(`${baseUrl}/RewardsCheck`, {
+        method: 'POST',
+        headers: {
+          Cookie: authCookie(String(user._id)),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          destinationPubkey: ' 03merchantpubkey ',
+        }),
+      });
+
+      const body = await response.json();
+
+      assert.equal(response.status, 200);
+      assert.equal(body.ok, true);
+      assert.equal(body.rewardEligible, true);
+      assert.equal(body.merchantMatched, true);
+      assert.deepEqual(merchantQueries, [{
+        pubkey: {
+          $regex: '^03merchantpubkey$',
+          $options: 'i',
+        },
+      }]);
+    });
+  });
+});
+
+test('POST /RewardsCheck returns ineligible for unknown merchant pubkeys', async (t) => {
+  const user = buildUser({ _id: 'reward-check-user-2' });
+
+  await withPatchedMethods([
+    { target: User, key: 'findById', value: () => queryResult(user) },
+    {
+      target: MerchantPubKey,
+      key: 'findOne',
+      value: () => querySelectLeanResult(null),
+    },
+  ], async () => {
+    await maybeWithServer(t, async ({ baseUrl }) => {
+      const response = await fetch(`${baseUrl}/RewardsCheck`, {
+        method: 'POST',
+        headers: {
+          Cookie: authCookie(String(user._id)),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          destinationPubkey: '03unknownpubkey',
+        }),
+      });
+
+      const body = await response.json();
+
+      assert.equal(response.status, 200);
+      assert.equal(body.ok, true);
+      assert.equal(body.rewardEligible, false);
+      assert.equal(body.merchantMatched, false);
+    });
+  });
+});
+
+test('POST /RewardsCheck validates destinationPubkey', async (t) => {
+  const user = buildUser({ _id: 'reward-check-user-3' });
+
+  await withPatchedMethods([
+    { target: User, key: 'findById', value: () => queryResult(user) },
+  ], async () => {
+    await maybeWithServer(t, async ({ baseUrl }) => {
+      const response = await fetch(`${baseUrl}/RewardsCheck`, {
+        method: 'POST',
+        headers: {
+          Cookie: authCookie(String(user._id)),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          destinationPubkey: '   ',
+        }),
+      });
+
+      const body = await response.json();
+
+      assert.equal(response.status, 400);
+      assert.equal(body.ok, false);
+      assert.equal(body.error, 'destinationPubkey is required');
+    });
+  });
+});
+
+test('POST /messaging/v3/identity rejects an invalid wallet signature', async (t) => {
   const user = buildUser({
-    lightningAddress: 'alice@example.com',
+    lightningAddress: 'alice@split-loyalty.com',
   });
 
   await withPatchedMethods([
@@ -266,7 +499,7 @@ test('POST /messaging-key rejects an invalid wallet signature', async (t) => {
     { target: sessionHelper, key: 'verifyBreezSignedMessage', value: () => false },
   ], async () => {
     await maybeWithServer(t, async ({ baseUrl }) => {
-      const response = await fetch(`${baseUrl}/messaging-key`, {
+      const response = await fetch(`${baseUrl}/messaging/v3/identity`, {
         method: 'POST',
         headers: {
           Cookie: authCookie(String(user._id)),
@@ -277,7 +510,7 @@ test('POST /messaging-key rejects an invalid wallet signature', async (t) => {
           lightningAddress: user.lightningAddress,
           messagingPubkey: '02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
           messagingIdentitySignature: 'deadbeef',
-          messagingIdentitySignatureVersion: 1,
+          messagingIdentitySignatureVersion: 2,
           messagingIdentitySignedAt: 1_712_000_000,
         }),
       });
@@ -285,147 +518,24 @@ test('POST /messaging-key rejects an invalid wallet signature', async (t) => {
       const body = await response.json();
 
       assert.equal(response.status, 401);
-      assert.equal(body.error, 'Invalid messaging key signature');
+      assert.equal(body.error, 'Invalid messaging v2 identity signature');
     });
   });
 });
 
-test('POST /moonpay/prepare-buy returns a signed redirect URL for the authenticated wallet', async (t) => {
-  const user = buildUser();
-
-  await withPatchedMethods([
-    { target: User, key: 'findById', value: () => queryResult(user) },
-  ], async () => {
-    await maybeWithServer(t, async ({ baseUrl }) => {
-      const response = await fetch(`${baseUrl}/moonpay/prepare-buy`, {
-        method: 'POST',
-        headers: {
-          Cookie: authCookie(String(user._id)),
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          lockedAmountSats: 125000,
-          estimatedSpendAmountCents: 8450,
-        }),
-      });
-
-      const body = await response.json();
-      const redirectUrl = new URL(body.redirectUrl);
-      const state = redirectUrl.searchParams.get('state');
-      const verified = verifyMoonPayStateToken(state, { secret: process.env.secretKey });
-
-      assert.equal(response.status, 200);
-      assert.equal(redirectUrl.pathname, '/moonpay-return');
-      assert.equal(verified.walletPubkey, user.walletPubkey);
-      assert.equal(verified.lockedAmountSats, 125000);
-      assert.equal(verified.estimatedSpendAmountCents, 8450);
-    });
-  });
-});
-
-test('GET /moonpay-return logs a pending MoonPay purchase from a valid signed state', async (t) => {
-  const user = buildUser();
-  const loggedPurchases = [];
-  const { token } = createMoonPayStateToken({
-    walletPubkey: user.walletPubkey,
-    lockedAmountSats: 75000,
-    estimatedSpendAmountCents: 5100,
-    secret: process.env.secretKey,
-  });
-
-  await withPatchedMethods([
-    {
-      target: MoonPayPurchase,
-      key: 'findOneAndUpdate',
-      value: async (filter, update) => {
-        loggedPurchases.push({ filter, update });
-        return { moonpayTransactionId: filter.moonpayTransactionId };
-      },
-    },
-  ], async () => {
-    await maybeWithServer(t, async ({ baseUrl }) => {
-      const response = await fetch(
-        `${baseUrl}/moonpay-return?state=${encodeURIComponent(token)}&transactionId=mp_tx_123&transactionStatus=pending`
-      );
-      const body = await response.json();
-
-      assert.equal(response.status, 200);
-      assert.equal(body.ok, true);
-      assert.equal(body.didLogPurchase, true);
-      assert.equal(body.transactionStatus, 'pending');
-      assert.equal(body.lockedAmountSats, 75000);
-      assert.equal(loggedPurchases.length, 1);
-      assert.equal(loggedPurchases[0].filter.moonpayTransactionId, 'mp_tx_123');
-      assert.equal(loggedPurchases[0].update.$setOnInsert.walletPubkey, user.walletPubkey);
-      assert.equal(loggedPurchases[0].update.$setOnInsert.lockedAmountSats, 75000);
-      assert.equal(loggedPurchases[0].update.$setOnInsert.rewardAmountCents, 510);
-    });
-  });
-});
-
-test('POST /reward_onRamp_buy falls back to a single matching MoonPay purchase when no Stripe txid exists', async (t) => {
-  const user = buildUser();
-  const rewardUpdates = [];
-
-  await withPatchedMethods([
-    { target: User, key: 'findById', value: () => queryResult(user) },
-    { target: BitcoinPurchase, key: 'findOne', value: () => querySelectLeanResult(null) },
-    {
-      target: MoonPayPurchase,
-      key: 'find',
-      value: () => queryChainResult([{ _id: 'moonpay-1', rewardAmountCents: 875 }]),
-    },
-    {
-      target: MoonPayPurchase,
-      key: 'findOneAndUpdate',
-      value: () => ({ lean: async () => ({ rewardAmountCents: 875 }) }),
-    },
-    {
-      target: RewardSpend,
-      key: 'findOneAndUpdate',
-      value: async (filter, update) => {
-        rewardUpdates.push({ filter, update });
-        return {};
-      },
-    },
-  ], async () => {
-    await maybeWithServer(t, async ({ baseUrl }) => {
-      const response = await fetch(`${baseUrl}/reward_onRamp_buy`, {
-        method: 'POST',
-        headers: {
-          Cookie: authCookie(String(user._id)),
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          txid: 'claim-tx-1',
-          depositAmountSats: 75000,
-        }),
-      });
-
-      const body = await response.json();
-
-      assert.equal(response.status, 200);
-      assert.equal(body.rewardSpendApplied, true);
-      assert.equal(body.rewardSource, 'moonpay');
-      assert.equal(body.rewardAmountCents, 875);
-      assert.equal(rewardUpdates.length, 1);
-      assert.equal(rewardUpdates[0].filter.userId, String(user._id));
-      assert.equal(rewardUpdates[0].update.$inc.purchaseSpend, 875);
-    });
-  });
-});
-
-test('POST /messaging-key stores the legacy messaging identity when the signature is valid', async (t) => {
+test('POST /messaging/v3/identity stores the current messaging identity when the signature is valid', async (t) => {
   const user = buildUser({
-    lightningAddress: 'alice@example.com',
+    lightningAddress: 'alice@split-loyalty.com',
   });
 
   await withPatchedMethods([
     { target: User, key: 'findById', value: () => queryResult(user) },
     { target: sessionHelper, key: 'verifyBreezSignedMessage', value: () => true },
+    { target: MessagingDeviceRegistration, key: 'deleteMany', value: async () => ({ deletedCount: 0 }) },
+    ...createDirectoryModelPatches(),
   ], async () => {
     await maybeWithServer(t, async ({ baseUrl }) => {
-      const response = await fetch(`${baseUrl}/messaging-key`, {
+      const response = await fetch(`${baseUrl}/messaging/v3/identity`, {
         method: 'POST',
         headers: {
           Cookie: authCookie(String(user._id)),
@@ -436,7 +546,7 @@ test('POST /messaging-key stores the legacy messaging identity when the signatur
           lightningAddress: user.lightningAddress,
           messagingPubkey: '02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
           messagingIdentitySignature: 'deadbeef',
-          messagingIdentitySignatureVersion: 1,
+          messagingIdentitySignatureVersion: 2,
           messagingIdentitySignedAt: 1_712_000_000,
         }),
       });
@@ -447,33 +557,126 @@ test('POST /messaging-key stores the legacy messaging identity when the signatur
       assert.equal(body.ok, true);
       assert.equal(body.didUpdate, true);
       assert.equal(body.didRotate, false);
-      assert.equal(user.messagingPubkey, '02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb');
-      assert.equal(user.messagingIdentitySignature, 'deadbeef');
-      assert.equal(user.messagingIdentitySignatureVersion, 1);
-      assert.equal(Math.floor(user.messagingIdentitySignedAt.getTime() / 1000), 1_712_000_000);
+      assert.equal(user.messagingPubkeyV2, '02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb');
+      assert.equal(user.messagingIdentityV2Signature, 'deadbeef');
+      assert.equal(user.messagingIdentityV2SignatureVersion, 2);
+      assert.equal(Math.floor(user.messagingIdentityV2SignedAt.getTime() / 1000), 1_712_000_000);
+      assert.ok(body.directory);
       assert.equal(user.saveCalls, 1);
     });
   });
 });
 
-test('POST /messaging/resolve-recipient returns the signed recipient bundle when both sides are active', async (t) => {
+test('POST /messaging/v3/identity moves old-key pending messages into rekey-required when the recipient rotates keys', async (t) => {
+  const oldMessagingPubkey = '02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+  const newMessagingPubkey = '02cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc';
+  const user = buildUser({
+    lightningAddress: 'alice@split-loyalty.com',
+    messagingPubkeyV2: oldMessagingPubkey,
+    messagingIdentityV2Signature: 'old-signature',
+    messagingIdentityV2SignatureVersion: 2,
+    messagingIdentityV2SignedAt: new Date('2026-01-01T00:00:00.000Z'),
+  });
+  const directMessageFindCalls = [];
+  const directMessageUpdateCalls = [];
+  const attachmentUpdateCalls = [];
+
+  await withPatchedMethods([
+    { target: User, key: 'findById', value: () => queryResult(user) },
+    { target: sessionHelper, key: 'verifyBreezSignedMessage', value: () => true },
+    { target: MessagingDeviceRegistration, key: 'deleteMany', value: async () => ({ deletedCount: 0 }) },
+    {
+      target: DirectMessage,
+      key: 'find',
+      value: (filter) => {
+        directMessageFindCalls.push(filter);
+        return queryResult([
+          {
+            _id: new mongoose.Types.ObjectId('507f1f77bcf86cd799439041'),
+            senderUserId: 'sender-1',
+            recipientWalletPubkey: '02dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
+          },
+        ]);
+      },
+    },
+    {
+      target: DirectMessage,
+      key: 'updateMany',
+      value: async (filter, update) => {
+        directMessageUpdateCalls.push({ filter, update });
+        return { modifiedCount: 1 };
+      },
+    },
+    {
+      target: MessageAttachment,
+      key: 'updateMany',
+      value: async (filter, update) => {
+        attachmentUpdateCalls.push({ filter, update });
+        return { modifiedCount: 1 };
+      },
+    },
+    ...createDirectoryModelPatches(),
+  ], async () => {
+    await maybeWithServer(t, async ({ baseUrl }) => {
+      const response = await fetch(`${baseUrl}/messaging/v3/identity`, {
+        method: 'POST',
+        headers: {
+          Cookie: authCookie(String(user._id)),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          walletPubkey: user.walletPubkey,
+          lightningAddress: user.lightningAddress,
+          messagingPubkey: newMessagingPubkey,
+          messagingIdentitySignature: 'new-signature',
+          messagingIdentitySignatureVersion: 2,
+          messagingIdentitySignedAt: 1_712_000_123,
+        }),
+      });
+
+      const body = await response.json();
+
+      assert.equal(response.status, 200);
+      assert.equal(body.ok, true);
+      assert.equal(body.didUpdate, true);
+      assert.equal(body.didRotate, true);
+      assert.equal(user.messagingPubkeyV2, newMessagingPubkey);
+      assert.equal(directMessageFindCalls.length, 1);
+      assert.equal(directMessageFindCalls[0].recipientUserId, user._id);
+      assert.deepEqual(directMessageFindCalls[0].recipientMessagingPubkey.$in, [
+        oldMessagingPubkey,
+      ]);
+      assert.equal(directMessageFindCalls[0].status, 'pending');
+      assert.equal(directMessageUpdateCalls.length, 1);
+      assert.equal(directMessageUpdateCalls[0].update.$set.status, 'rekey_required');
+      assert.ok(directMessageUpdateCalls[0].update.$set.rekeyRequiredAt instanceof Date);
+      assert.equal(attachmentUpdateCalls.length, 1);
+      assert.equal(attachmentUpdateCalls[0].update.$set.status, 'uploaded');
+      assert.equal(attachmentUpdateCalls[0].update.$unset.linkedMessageId, '');
+      assert.equal(attachmentUpdateCalls[0].update.$unset.linkedClientMessageId, '');
+      assert.equal(user.saveCalls, 1);
+    });
+  });
+});
+
+test('POST /messaging/v3/directory/lookup returns the signed recipient bundle when both sides are active', async (t) => {
   const sender = buildUser({
     _id: 'sender-1',
-    lightningAddress: 'alice@example.com',
-    messagingPubkey: '02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
-    messagingIdentitySignature: 'sender-signature',
-    messagingIdentitySignatureVersion: 1,
-    messagingIdentitySignedAt: new Date('2026-01-01T00:00:00.000Z'),
+    lightningAddress: 'alice@split-loyalty.com',
+    messagingPubkeyV2: '02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+    messagingIdentityV2Signature: 'sender-signature',
+    messagingIdentityV2SignatureVersion: 2,
+    messagingIdentityV2SignedAt: new Date('2026-01-01T00:00:00.000Z'),
   });
   const recipient = buildUser({
     _id: 'recipient-1',
     walletPubkey: '02cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
-    lightningAddress: 'bob@example.com',
-    messagingPubkey: '02dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
-    messagingIdentitySignature: 'recipient-signature',
-    messagingIdentitySignatureVersion: 1,
-    messagingIdentitySignedAt: new Date('2026-01-02T00:00:00.000Z'),
-    profilePicUrl: 'https://cdn.example.invalid/bob.png',
+    lightningAddress: 'bob@split-loyalty.com',
+    messagingPubkeyV2: '02dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
+    messagingIdentityV2Signature: 'recipient-signature',
+    messagingIdentityV2SignatureVersion: 2,
+    messagingIdentityV2SignedAt: new Date('2026-01-02T00:00:00.000Z'),
+    profilePicUrl: 'https://cdn.split-loyalty.com/bob.png',
   });
 
   await withPatchedMethods([
@@ -489,9 +692,10 @@ test('POST /messaging/resolve-recipient returns the signed recipient bundle when
         lightningAddress === recipient.lightningAddress ? recipient : null
       ),
     },
+    ...createDirectoryModelPatches(),
   ], async () => {
     await maybeWithServer(t, async ({ baseUrl }) => {
-      const response = await fetch(`${baseUrl}/messaging/resolve-recipient`, {
+      const response = await fetch(`${baseUrl}/messaging/v3/directory/lookup`, {
         method: 'POST',
         headers: {
           Cookie: authCookie(String(sender._id)),
@@ -508,8 +712,9 @@ test('POST /messaging/resolve-recipient returns the signed recipient bundle when
       assert.equal(body.ok, true);
       assert.equal(body.recipient.walletPubkey, recipient.walletPubkey);
       assert.equal(body.recipient.lightningAddress, recipient.lightningAddress);
-      assert.equal(body.recipient.messagingPubkey, recipient.messagingPubkey);
+      assert.equal(body.recipient.messagingPubkey, recipient.messagingPubkeyV2);
       assert.equal(body.recipient.profilePicUrl, recipient.profilePicUrl);
+      assert.ok(body.directory);
     });
   });
 });
@@ -517,13 +722,13 @@ test('POST /messaging/resolve-recipient returns the signed recipient bundle when
 test('POST /messaging/blocks creates a block by lightningAddress and clears pending relay messages', async (t) => {
   const blocker = buildUser({
     _id: 'blocker-1',
-    lightningAddress: 'alice@example.com',
+    lightningAddress: 'alice@split-loyalty.com',
   });
   const target = buildUser({
     _id: 'blocked-1',
     walletPubkey: '02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
-    lightningAddress: 'bob@example.com',
-    profilePicUrl: 'https://cdn.example.invalid/bob.png',
+    lightningAddress: 'bob@split-loyalty.com',
+    profilePicUrl: 'https://cdn.split-loyalty.com/bob.png',
   });
   const deletedMessageFilters = [];
 
@@ -615,8 +820,8 @@ test('GET /messaging/blocks returns the authenticated users block list', async (
       blockerUserId: blocker._id,
       blockedUserId: 'blocked-1',
       blockedWalletPubkey: '02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
-      blockedLightningAddress: 'bob@example.com',
-      blockedProfilePicUrl: 'https://cdn.example.invalid/bob.png',
+      blockedLightningAddress: 'bob@split-loyalty.com',
+      blockedProfilePicUrl: 'https://cdn.split-loyalty.com/bob.png',
       createdAt: new Date('2026-04-08T12:00:00.000Z'),
       updatedAt: new Date('2026-04-08T12:00:00.000Z'),
     },
@@ -683,10 +888,10 @@ test('DELETE /messaging/blocks/:blockedWalletPubkey removes a block idempotently
   });
 });
 
-test('POST /messaging/v2/directory/lookup returns a generic unavailable error when the recipient blocked the sender', async (t) => {
+test('POST /messaging/v3/directory/lookup returns a generic unavailable error when the recipient blocked the sender', async (t) => {
   const sender = buildUser({
     _id: 'sender-1',
-    lightningAddress: 'alice@example.com',
+    lightningAddress: 'alice@split-loyalty.com',
     messagingPubkeyV2: '02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
     messagingIdentityV2Signature: 'sender-v2-signature',
     messagingIdentityV2SignatureVersion: 2,
@@ -695,7 +900,7 @@ test('POST /messaging/v2/directory/lookup returns a generic unavailable error wh
   const recipient = buildUser({
     _id: 'recipient-1',
     walletPubkey: '02cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
-    lightningAddress: 'bob@example.com',
+    lightningAddress: 'bob@split-loyalty.com',
     messagingPubkeyV2: '02dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
     messagingIdentityV2Signature: 'recipient-v2-signature',
     messagingIdentityV2SignatureVersion: 2,
@@ -727,7 +932,7 @@ test('POST /messaging/v2/directory/lookup returns a generic unavailable error wh
     },
   ], async () => {
     await maybeWithServer(t, async ({ baseUrl }) => {
-      const response = await fetch(`${baseUrl}/messaging/v2/directory/lookup`, {
+      const response = await fetch(`${baseUrl}/messaging/v3/directory/lookup`, {
         method: 'POST',
         headers: {
           Cookie: authCookie(String(sender._id)),
@@ -746,10 +951,10 @@ test('POST /messaging/v2/directory/lookup returns a generic unavailable error wh
   });
 });
 
-test('POST /messaging/v2/send rejects sends to a user the sender has blocked', async (t) => {
+test('POST /messaging/v3/send rejects sends to a user the sender has blocked', async (t) => {
   const sender = buildUser({
     _id: 'sender-1',
-    lightningAddress: 'alice@example.com',
+    lightningAddress: 'alice@split-loyalty.com',
     messagingPubkeyV2: '02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
     messagingIdentityV2Signature: 'sender-v2-signature',
     messagingIdentityV2SignatureVersion: 2,
@@ -758,7 +963,7 @@ test('POST /messaging/v2/send rejects sends to a user the sender has blocked', a
   const recipient = buildUser({
     _id: 'recipient-1',
     walletPubkey: '02cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
-    lightningAddress: 'bob@example.com',
+    lightningAddress: 'bob@split-loyalty.com',
     messagingPubkeyV2: '02dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
     messagingIdentityV2Signature: 'recipient-v2-signature',
     messagingIdentityV2SignatureVersion: 2,
@@ -791,7 +996,7 @@ test('POST /messaging/v2/send rejects sends to a user the sender has blocked', a
     { target: sessionHelper, key: 'verifyBreezSignedMessage', value: () => true },
   ], async () => {
     await maybeWithServer(t, async ({ baseUrl }) => {
-      const response = await fetch(`${baseUrl}/messaging/v2/send`, {
+      const response = await fetch(`${baseUrl}/messaging/v3/send`, {
         method: 'POST',
         headers: {
           Cookie: authCookie(String(sender._id)),
@@ -826,7 +1031,7 @@ test('POST /messaging/v2/send rejects sends to a user the sender has blocked', a
 
 test('POST /messaging/v3/device-registrations stores a registration for the active messaging pubkey', async (t) => {
   const user = buildUser({
-    lightningAddress: 'alice@example.com',
+    lightningAddress: 'alice@split-loyalty.com',
     messagingPubkeyV2: '02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
     messagingIdentityV2Signature: 'sender-v2-signature',
     messagingIdentityV2SignatureVersion: 2,
@@ -843,7 +1048,7 @@ test('POST /messaging/v3/device-registrations stores a registration for the acti
     environment: 'dev',
     registrationSignedAt: new Date('2026-04-10T12:00:00.000Z'),
     appVersion: '3.7.0',
-    bundleId: 'com.example.app',
+    bundleId: 'com.splitloyalty.app.Split-Rewards',
     lastSeenAt: new Date('2026-04-10T12:00:00.000Z'),
     createdAt: new Date('2026-04-10T12:00:00.000Z'),
     updatedAt: new Date('2026-04-10T12:00:00.000Z'),
@@ -884,7 +1089,7 @@ test('POST /messaging/v3/device-registrations stores a registration for the acti
           registrationSignatureVersion: 1,
           registrationSignedAt: 1_712_750_400,
           appVersion: '3.7.0',
-          bundleId: 'com.example.app',
+          bundleId: 'com.splitloyalty.app.Split-Rewards',
         }),
       });
 
@@ -903,56 +1108,13 @@ test('POST /messaging/v3/device-registrations stores a registration for the acti
   });
 });
 
-test('GET /messaging/v3/device-registrations returns active registrations for the current environment', async (t) => {
+test('POST /messaging/v3/ack deletes successfully delivered relay messages', async (t) => {
   const user = buildUser({
-    lightningAddress: 'alice@example.com',
-    messagingPubkeyV2: '02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
-  });
-  const registrations = [
-    {
-      _id: 'registration-1',
-      walletPubkey: user.walletPubkey,
-      messagingPubkey: user.messagingPubkeyV2,
-      deviceToken: 'a'.repeat(64),
-      platform: 'apns',
-      environment: 'dev',
-      registrationSignedAt: new Date('2026-04-10T12:00:00.000Z'),
-      lastSeenAt: new Date('2026-04-10T12:01:00.000Z'),
-      createdAt: new Date('2026-04-10T12:00:00.000Z'),
-      updatedAt: new Date('2026-04-10T12:01:00.000Z'),
-    },
-  ];
-
-  await withPatchedMethods([
-    { target: User, key: 'findById', value: () => queryResult(user) },
-    { target: MessagingDeviceRegistration, key: 'find', value: () => queryChainResult(registrations) },
-  ], async () => {
-    await maybeWithServer(t, async ({ baseUrl }) => {
-      const response = await fetch(`${baseUrl}/messaging/v3/device-registrations`, {
-        headers: {
-          Cookie: authCookie(String(user._id)),
-        },
-      });
-
-      const body = await response.json();
-
-      assert.equal(response.status, 200);
-      assert.equal(body.ok, true);
-      assert.equal(body.environment, 'dev');
-      assert.equal(body.messagingPubkey, user.messagingPubkeyV2);
-      assert.equal(body.registrations.length, 1);
-      assert.equal(body.registrations[0].deviceToken, registrations[0].deviceToken);
-    });
-  });
-});
-
-test('POST /messaging/v3/ack marks pending messages delivered instead of deleting them', async (t) => {
-  const user = buildUser({
-    lightningAddress: 'alice@example.com',
+    lightningAddress: 'alice@split-loyalty.com',
     messagingPubkey: '02aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab',
     messagingPubkeyV2: '02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
   });
-  const updateCalls = [];
+  const deleteCalls = [];
   const messageIds = [
     '507f1f77bcf86cd799439011',
     '507f1f77bcf86cd799439012',
@@ -962,10 +1124,10 @@ test('POST /messaging/v3/ack marks pending messages delivered instead of deletin
     { target: User, key: 'findById', value: () => queryResult(user) },
     {
       target: DirectMessage,
-      key: 'updateMany',
-      value: async (filter, update) => {
-        updateCalls.push({ filter, update });
-        return { modifiedCount: 2 };
+      key: 'deleteMany',
+      value: async (filter) => {
+        deleteCalls.push(filter);
+        return { deletedCount: 2 };
       },
     },
   ], async () => {
@@ -984,21 +1146,20 @@ test('POST /messaging/v3/ack marks pending messages delivered instead of deletin
       assert.equal(response.status, 200);
       assert.equal(body.ok, true);
       assert.equal(body.acknowledgedCount, 2);
-      assert.equal(updateCalls.length, 1);
-      assert.deepEqual(updateCalls[0].filter.recipientMessagingPubkey.$in, [
+      assert.equal(deleteCalls.length, 1);
+      assert.deepEqual(deleteCalls[0].recipientMessagingPubkey.$in, [
         user.messagingPubkeyV2,
-        user.messagingPubkey,
       ]);
-      assert.equal(updateCalls[0].update.$set.status, 'delivered');
-      assert.ok(updateCalls[0].update.$set.deliveredAt instanceof Date);
-      assert.equal(updateCalls[0].update.$unset.ciphertext, '');
+      assert.deepEqual(deleteCalls[0]._id.$in.map(String), messageIds);
+      assert.equal(String(deleteCalls[0].recipientUserId), String(user._id));
+      assert.equal(deleteCalls[0].status, 'pending');
     });
   });
 });
 
 test('POST /messaging/v3/rekey-required marks messages and reopens linked attachments for resend', async (t) => {
   const user = buildUser({
-    lightningAddress: 'alice@example.com',
+    lightningAddress: 'alice@split-loyalty.com',
     messagingPubkeyV2: '02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
   });
   const messageIds = [
@@ -1061,7 +1222,7 @@ test('POST /messaging/v3/rekey-required marks messages and reopens linked attach
 
 test('POST /messaging/v3/decrypt-failed requests one silent retry, then marks the next attempt terminal', async (t) => {
   const user = buildUser({
-    lightningAddress: 'alice@example.com',
+    lightningAddress: 'alice@split-loyalty.com',
     messagingPubkeyV2: '02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
   });
   const directMessageUpdateCalls = [];
@@ -1139,239 +1300,75 @@ test('POST /messaging/v3/decrypt-failed requests one silent retry, then marks th
   });
 });
 
-test('GET /pos-feed/posts excludes posts from users the viewer has blocked', async (t) => {
-  const viewer = buildUser({
-    _id: 'viewer-1',
-  });
-  const blockedPosterUserId = 'blocked-poster-1';
-  const postQueries = [];
-  const returnedPosts = [
-    {
-      _id: 'post-visible-1',
-      posterUserId: 'visible-poster-1',
-      posterLightningAddress: 'visible@example.com',
-      caption: 'Visible post',
-    },
-  ];
-
-  await withPatchedMethods([
-    { target: User, key: 'findById', value: () => queryResult(viewer) },
-    {
-      target: UserBlock,
-      key: 'find',
-      value: (query) => {
-        return {
-          select() {
-            return {
-              lean: async () => {
-                return [{ blockedUserId: blockedPosterUserId }];
-              },
-            };
-          },
-        };
-      },
-    },
-    {
-      target: POSFeedPostReport,
-      key: 'find',
-      value: () => ({
-        select() {
-          return {
-            lean: async () => [],
-          };
-        },
-      }),
-    },
-    {
-      target: POSFeedPost,
-      key: 'find',
-      value: (query) => {
-        postQueries.push(query);
-        return queryChainResult(returnedPosts);
-      },
-    },
-  ], async () => {
-    await maybeWithServer(t, async ({ baseUrl }) => {
-      const response = await fetch(`${baseUrl}/pos-feed/posts?limit=10`, {
-        headers: {
-          Cookie: authCookie(String(viewer._id)),
-        },
-      });
-
-      const body = await response.json();
-
-      assert.equal(response.status, 200);
-      assert.deepEqual(postQueries, [
-        { posterUserId: { $nin: [blockedPosterUserId] } },
-      ]);
-      assert.equal(body.posts.length, 1);
-      assert.equal(body.posts[0]._id, returnedPosts[0]._id);
-      assert.equal(body.posts[0].viewerHasReported, false);
-      assert.equal(body.posts[0].isOwnPost, false);
-    });
-  });
-});
-
-test('GET /pos-feed/posts marks posts already reported by the viewer', async (t) => {
-  const viewer = buildUser({
-    _id: 'viewer-2',
-  });
-  const returnedPosts = [
-    {
-      _id: 'post-reported-1',
-      posterUserId: 'poster-2',
-      posterLightningAddress: 'poster@example.com',
-      reportCount: 3,
-      isFlagged: true,
-    },
-  ];
-
-  await withPatchedMethods([
-    { target: User, key: 'findById', value: () => queryResult(viewer) },
-    {
-      target: UserBlock,
-      key: 'find',
-      value: () => ({
-        select() {
-          return {
-            lean: async () => [],
-          };
-        },
-      }),
-    },
-    {
-      target: POSFeedPost,
-      key: 'find',
-      value: () => queryChainResult(returnedPosts),
-    },
-    {
-      target: POSFeedPostReport,
-      key: 'find',
-      value: () => ({
-        select() {
-          return {
-            lean: async () => [{ postId: returnedPosts[0]._id }],
-          };
-        },
-      }),
-    },
-  ], async () => {
-    await maybeWithServer(t, async ({ baseUrl }) => {
-      const response = await fetch(`${baseUrl}/pos-feed/posts`, {
-        headers: {
-          Cookie: authCookie(String(viewer._id)),
-        },
-      });
-
-      const body = await response.json();
-
-      assert.equal(response.status, 200);
-      assert.equal(body.posts[0].viewerHasReported, true);
-      assert.equal(body.posts[0].reportCount, 3);
-      assert.equal(body.posts[0].isFlagged, true);
-    });
-  });
-});
-
-test('POST /pos-feed/posts/:id/report flags a post once and returns updated viewer report state', async (t) => {
-  const reporter = buildUser({
-    _id: 'reporter-1',
-    walletPubkey: '02cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
-    lightningAddress: 'reporter@example.com',
-  });
-  const originalPost = {
-    _id: 'post-flag-1',
-    posterUserId: 'poster-flag-1',
-    posterLightningAddress: 'poster@example.com',
-    transactionId: 'tx-flag-1',
-    amountSats: 2100,
-    placeText: 'Coffee Shop',
-    caption: 'Great espresso',
-    imageUrl: 'https://cdn.example.invalid/post.jpg',
-    reportCount: 0,
-    isFlagged: false,
-  };
-  const updatedPost = {
-    ...originalPost,
-    reportCount: 1,
-    isFlagged: true,
-  };
-  const createdReports = [];
-  const updateCalls = [];
-  const logLines = [];
-
-  await withPatchedMethods([
-    { target: User, key: 'findById', value: () => queryResult(reporter) },
-    { target: POSFeedPost, key: 'findById', value: () => queryLeanResult(originalPost) },
-    {
-      target: POSFeedPostReport,
-      key: 'findOne',
-      value: () => queryResult(null),
-    },
-    {
-      target: POSFeedPostReport,
-      key: 'create',
-      value: async (payload) => {
-        createdReports.push(payload);
-        return { _id: 'report-1', ...payload };
-      },
-    },
-    {
-      target: POSFeedPost,
-      key: 'findByIdAndUpdate',
-      value: (id, update) => {
-        updateCalls.push({ id, update });
-        return queryLeanResult(updatedPost);
-      },
-    },
-    {
-      target: console,
-      key: 'log',
-      value: (...args) => {
-        logLines.push(args.join(' '));
-      },
-    },
-  ], async () => {
-    await maybeWithServer(t, async ({ baseUrl }) => {
-      const response = await fetch(`${baseUrl}/pos-feed/posts/${originalPost._id}/report`, {
-        method: 'POST',
-        headers: {
-          Cookie: authCookie(String(reporter._id)),
-        },
-      });
-
-      const body = await response.json();
-
-      assert.equal(response.status, 200);
-      assert.equal(body.ok, true);
-      assert.equal(body.didUpdate, true);
-      assert.equal(body.post._id, originalPost._id);
-      assert.equal(body.post.viewerHasReported, true);
-      assert.equal(body.post.reportCount, 1);
-      assert.equal(body.post.isFlagged, true);
-      assert.equal(createdReports.length, 1);
-      assert.equal(createdReports[0].postId, originalPost._id);
-      assert.equal(createdReports[0].reporterUserId, reporter._id);
-      assert.equal(updateCalls.length, 1);
-      assert.deepEqual(updateCalls[0].update.$inc, { reportCount: 1 });
-      assert.equal(updateCalls[0].update.$set.isFlagged, true);
-      assert.equal(logLines.some((line) => line.includes('POS FEED POST FLAG START')), true);
-    });
-  });
-});
-
-test('POST /pos-feed/posts requires a Lightning address before creating a Proof of Spend post', async (t) => {
+test('GET /messaging/v3/outgoing-statuses prioritizes actionable statuses ahead of newer normal traffic', async (t) => {
   const user = buildUser({
-    _id: 'poster-1',
-    lightningAddress: null,
+    _id: 'sender-status-user-1',
   });
+  const findCalls = [];
+  const actionableMessages = [
+    {
+      _id: 'msg-undelivered-1',
+      clientMessageId: 'client-undelivered-1',
+      recipientLightningAddress: 'alice@split-loyalty.com',
+      recipientWalletPubkey: 'wallet-undelivered-1',
+      status: 'undelivered',
+      sameKeyRetryCount: 0,
+      createdAt: new Date('2026-04-01T10:00:00.000Z'),
+      updatedAt: new Date('2026-04-15T12:00:00.000Z'),
+      expiredAt: new Date('2026-04-15T12:00:00.000Z'),
+    },
+    {
+      _id: 'msg-rekey-1',
+      clientMessageId: 'client-rekey-1',
+      recipientLightningAddress: 'bob@split-loyalty.com',
+      recipientWalletPubkey: 'wallet-rekey-1',
+      status: 'rekey_required',
+      sameKeyRetryCount: 0,
+      createdAt: new Date('2026-03-25T09:00:00.000Z'),
+      updatedAt: new Date('2026-04-14T08:30:00.000Z'),
+      rekeyRequiredAt: new Date('2026-04-14T08:30:00.000Z'),
+    },
+  ];
+  const recentMessages = [
+    {
+      _id: 'msg-delivered-1',
+      clientMessageId: 'client-delivered-1',
+      status: 'delivered',
+      createdAt: new Date('2026-04-16T15:00:00.000Z'),
+      updatedAt: new Date('2026-04-16T15:01:00.000Z'),
+      deliveredAt: new Date('2026-04-16T15:01:00.000Z'),
+    },
+  ];
 
   await withPatchedMethods([
     { target: User, key: 'findById', value: () => queryResult(user) },
+    {
+      target: DirectMessage,
+      key: 'find',
+      value: (filter) => {
+        const call = { filter, sort: null, limit: null };
+        findCalls.push(call);
+
+        const resultSet = filter?.status?.$in
+          ? actionableMessages
+          : recentMessages;
+
+        return {
+          sort(sortSpec) {
+            call.sort = sortSpec;
+            return this;
+          },
+          limit(limitValue) {
+            call.limit = limitValue;
+            return this;
+          },
+          lean: async () => resultSet,
+        };
+      },
+    },
   ], async () => {
     await maybeWithServer(t, async ({ baseUrl }) => {
-      const response = await fetch(`${baseUrl}/pos-feed/posts`, {
-        method: 'POST',
+      const response = await fetch(`${baseUrl}/messaging/v3/outgoing-statuses?limit=3`, {
         headers: {
           Cookie: authCookie(String(user._id)),
         },
@@ -1379,8 +1376,29 @@ test('POST /pos-feed/posts requires a Lightning address before creating a Proof 
 
       const body = await response.json();
 
-      assert.equal(response.status, 409);
-      assert.equal(body.error, 'A Lightning address is required to create a Proof of Spend post.');
+      assert.equal(response.status, 200);
+      assert.equal(body.ok, true);
+      assert.equal(findCalls.length, 2);
+      assert.deepEqual(findCalls[0].filter, {
+        senderUserId: user._id,
+        status: { $in: ['rekey_required', 'same_key_retry_required', 'failed_same_key', 'undelivered'] },
+      });
+      assert.deepEqual(findCalls[0].sort, { updatedAt: -1, createdAt: -1 });
+      assert.equal(findCalls[0].limit, 3);
+      assert.deepEqual(findCalls[1].filter, {
+        senderUserId: user._id,
+        status: { $nin: ['rekey_required', 'same_key_retry_required', 'failed_same_key', 'undelivered'] },
+      });
+      assert.deepEqual(findCalls[1].sort, { createdAt: -1 });
+      assert.equal(findCalls[1].limit, 1);
+      assert.deepEqual(
+        body.messages.map((message) => message.messageId),
+        ['msg-undelivered-1', 'msg-rekey-1', 'msg-delivered-1']
+      );
+      assert.deepEqual(
+        body.messages.map((message) => message.status),
+        ['undelivered', 'rekey_required', 'delivered']
+      );
     });
   });
 });

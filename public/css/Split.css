@@ -1,0 +1,2626 @@
+.rocket-man {
+    background-image: url(/Split-images/Rocket-man.png);
+    background-size: cover;
+    background-repeat: no-repeat;
+    background-position: center;
+    width: 100px;
+    height: 100px;
+    margin-left: auto;
+    margin-right: auto;
+    margin-bottom: .5%;
+    border-radius: 4%;
+}
+
+
+.page-title {
+    margin-top: 8%;
+    padding: 3%;
+    font-size: 22px;
+    font-weight: bold;
+    margin-bottom: 5%;
+    text-align: center;
+}
+
+
+.forgot-form {
+    background-color: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    width: 89%;
+    margin: 1% auto;
+    margin-top: 50%;
+}
+
+.list {
+    background-color: white;
+    text-align: center;
+    padding: 10 px 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-around; /* Updated to distribute items evenly */
+    position: fixed;
+    bottom: 0;
+    left: 0; /* Adjusted to start from the left edge of the screen */
+    width: 100%;
+    border: 2px solid #ddd;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+    border-radius: 4%;
+    z-index: 1000;
+}
+
+.list ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-wrap: nowrap;
+}
+
+.list ul li {
+    margin-right: 10px;
+}
+
+.list a {
+    text-decoration: none;
+    color: white;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background-color: white;
+    transition: background-color 0.3s ease;
+}
+
+.list a:hover {
+    background-color: #f0f0f0;
+}
+
+/* Media query for smaller screens */
+@media screen and (max-width: 600px) {
+    .list {
+        flex-direction: column;
+    }
+
+    .list ul li {
+        margin-right: 0;
+        margin-bottom: 0;
+    }
+}
+
+
+#logoutButton:hover {
+    background-color: #0056b3;
+}
+
+.business-account-update {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+.business-account-update label,
+.business-account-update input {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.title {
+    text-align: center;
+    margin-bottom: 20px; /* Adjust the margin as needed */
+}
+
+
+ul {
+    list-style: none; /* Remove the bullets from the list */
+    padding: 0;
+}
+
+li {
+    margin-bottom: 15px; /* Add spacing between list items */
+}
+
+
+h3 {
+    text-align: center;
+
+}
+/* Coupon Screen */
+.tab-container {
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    overflow: hidden;
+    margin-bottom: 20px;
+}
+
+.tab {
+    float: left;
+    cursor: pointer;
+    padding: 10px 20px;
+    background-color: #f2f2f2;
+    border-right: 1px solid #ccc;
+    border-radius: 5px 5px 0 0;
+}
+
+.tab:last-child {
+    border-right: none;
+}
+
+
+.form-container {
+    display: none;
+    padding: 20px;
+    border: 1px solid #ccc;
+    border-radius: 0 0 5px 5px;
+}
+
+.calculator-fieldset {
+    border: 2px solid #9d9b9b;
+    border-radius: 5px;
+    padding: 10px;
+}
+
+.group-container {
+    background-color: #5d55f6;
+    padding: 15px;
+    margin-bottom: 20px;
+    border-radius: 8px;
+    color: white;
+}
+
+.field-group {
+    margin-bottom: 5px;
+}
+
+.field-group label {
+    font-weight: bold;
+    display: block;
+    margin-bottom: 5px;
+}
+
+.field-group input {
+    width: 50%;
+    box-sizing: border-box;
+    padding: 8px;
+    border: 1px solid #ffffff;
+    border-radius: 2px;
+}
+
+.result-div {
+    /* Add any styling for the result div if needed */
+    color: #3498db; /* Bright blue text color */
+    background-color: transparent; /* Transparent background */
+    padding: 10px;
+    text-align: center;
+    border-radius: 5px;
+    margin-bottom: 10px;
+}
+
+/* Landing Page Screen */
+
+
+
+
+
+
+.free {
+    color: #F05693;
+    border: .25px solid white;
+    padding: 1.5px;
+}
+
+.form-title-admo {
+    margin-top: 8%;
+    font-size: 24px;
+    font-weight: bold;
+    margin-bottom: 20px;
+    text-align: center;
+    color: #0F265B;
+}
+
+.bigLogo {
+    width: 60%; /* Adjust as needed */
+    background-color:  #59BAB7;
+    align-items: center;
+}
+
+.bigLogo img {
+    width: 100%; /* Ensure the logo fills its container */
+    height: auto; /* Maintain aspect ratio */
+}
+
+.email {
+    color: #F05693;
+}
+
+.no-deposit {
+    text-align: center;
+    margin-top: -25%;
+}
+
+/*--------------------------------------------------------------------ReFactored CSS---------------------------------------*/
+
+:root {
+        --primary-color:  #59BAB7;
+        --secondary-color:  #F05693;
+        --third-color: #052065;
+        --font-family: 'Arial, sans-serif';
+        --font-size-base: 16px;
+        --margin-base: 16px;
+        --padding-base: 16px;
+      }
+/*-----------------------------------------------------------Universal Components-----------------------------------------*/
+html {
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden; /* Prevent horizontal scroll */
+    width: 100%; /* Ensure full width does not exceed the viewport */
+    box-sizing: border-box;
+    background-color: white;
+    }
+
+body {
+    font-family: Arial, sans-serif;
+    background-color: white;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    color: var(--third-color);
+    overflow-x: hidden; /* Prevent horizontal scroll */
+    width: 100%; /* Ensure full width does not exceed the viewport */
+    box-sizing: border-box; /* prevent horizontal scroll*/
+    }
+
+.content {
+    padding: 3%;
+    margin-top: 25%;
+    margin-bottom: 10%;
+    }
+
+.button {
+        background-color: var(--third-color);
+        color: #fff;
+        padding: 10px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 16px;
+        display: block;
+        margin: 0 auto;
+        margin-bottom: 2%;
+        width: 200px;
+        border-radius: 15px;
+        text-align: center;
+    }
+
+.button:hover {
+        background-color: var(--primary-color);
+    }
+
+
+
+fieldset {
+        border: none;
+        padding: 0;
+    }
+
+input {
+        width: 80%;
+        padding: 10px;
+        margin-bottom: 16px;
+        border: 1px solid #ddd;
+        border-radius: 15px;
+        box-sizing: content-box;
+        margin-left: 0;
+        margin-right: 0;
+
+        background-color: white;
+        color: var(--third-color);
+        font-weight: 700;
+        font-size: 15px;
+    }
+
+label {
+        display: block;
+        margin-bottom: 3px;
+        margin-left: 0;
+    }
+
+
+/*-------------------------------------------------------------Header----------------------------------------------------------*/
+
+.header-container {
+    position: fixed;
+    height: auto;
+    width: 100%;
+    background-color: white;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    }
+
+.header-image {
+    width: 20%;
+    height: auto;
+    margin-left: 10%;
+    margin-right: 3%;
+    }
+
+.header-text-container {
+    flex-grow: 1;
+    }
+
+.header-text {
+    margin: 0;
+    color: var(--third-color);
+    padding-top: 7%;
+    padding-right: 30%;
+    padding-bottom: 5%;
+    text-align: center;
+    }
+
+
+/*-----------------------------------------------------------------Footer--------------------------------------------------*/
+
+.footer {
+        font-size: 100%;
+        background-color: white;
+        text-align: center;
+        padding: 0;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        height: 8%;
+        border-top: 2px solid #ddd;
+        border-bottom: 2px solid #ddd;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+        z-index: 1000;
+    }
+
+.footer ul {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        display: flex;
+        justify-content: space-around;
+        height: 100%;
+    }
+
+.footer ul li {
+    flex: 1;
+    text-align: center;
+    align-items: center;
+    }
+
+.footer a {
+        text-decoration: none;
+        color: var(--secondary-color);
+        display: block;
+        padding: 10px 10px;
+        transition: background-color 0.3s ease;
+        border-top: 2px solid transparent;
+        border-bottom: 2px solid transparent;
+    }
+
+.footer a:hover {
+        background-color: #f0f0f0;
+    }
+/*--------------------------------------------Business Create Account Screen--------------------------------------------*/
+
+.create-account-button {
+    background-color: var(--secondary-color);
+    color: #fff;
+    padding: 10px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    display: block;
+    margin: 0 auto;
+    margin-bottom: 3%;
+    width: 100px;
+    border-radius: 15px;
+    text-align: center;
+    }
+
+.create-account-button:hover {
+    background-color: var(--primary-color);
+    }
+
+.cancel-create-account-button {
+    background-color: var(--primary-color);
+    color: #fff;
+    border: none;
+    cursor: pointer;
+    margin-bottom: 10%;
+    text-align: center;
+    }
+
+.cancel-create-account-button:hover {
+    background-color: var(--primary-color);
+    }
+
+.create-content {
+        display: flex;
+        flex-direction: column; /* Arrange items in columns */
+        align-items: center; /* Horizontally center the content */
+        justify-content: center; /* Vertically center the content */
+        margin: 0 auto; /* Center the container horizontally in the viewport */
+        margin-top: 20%; /* Optional: Adjust vertical spacing from the top */
+        width: 75%; /* Set container width */
+    }
+
+    .customer-create-form {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+        margin: 20px auto;
+        margin-bottom: 0%;
+        margin-top: 25%;
+        width: 100%;
+        background-color: white;
+      }
+
+    .customer-create-form form {
+        margin-top: 10%;
+    }
+
+    .customer-create-form p {
+        margin-left: 3%;
+        margin-right: 3%;
+    }
+
+    .customer-create-form button {
+        background-color: #132b62;
+        color: #ffffff;
+        border: none;
+        padding: 10px 20px;
+        font-size: 16px;
+        cursor: pointer;
+        border-radius: 10px;
+        transition: background-color 0.3s ease;
+        margin-bottom: 2%;
+        margin-right: 4%;
+    }
+
+    .create-button-container {
+        display: flex;
+        justify-content: center;
+        width: 100%;
+        margin-top: 5%;
+    }
+
+/*----------------------------------------------Customer Login Screen------------------------------------------------------*/
+
+.login-page-title {
+    margin-top: 8%;
+    padding: 3%;
+    font-size: 22px;
+    font-weight: bold;
+    margin-bottom: 5%;
+    text-align: center;
+    }
+
+.pwaInstructions {
+    text-align: center;
+    color: var(--secondary-color);
+    font-weight: bold;
+}
+
+.login-switch-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    border-radius: 5px;
+    background-color: #f0f0f0;
+    width: 75%;
+    margin: 20px auto;
+    height: 10%;
+
+
+}
+
+
+.login-switch-label {
+    flex: 1;
+    text-align: center;
+    padding: 10px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background-color 0.3s ease, color 0.3s ease;
+    text-decoration: none;
+    color: var(--third-color);
+    background-color: white;
+    justify-content: center;
+    height: 10%;
+
+    }
+
+.login-switch-label:hover {
+    background-color: #ccc;
+    color: white;
+    }
+
+.login-switch-label.active {
+    background-color: var(--third-color);
+    color: white;
+
+    }
+
+.customer-login-form {
+    background-color: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    width: 75%;
+    margin: 1% auto;
+    margin-top: 5%;
+    }
+
+.customer-login-form p {
+    text-align: center;
+    margin-bottom: 8%;
+}
+
+.login-button-container {
+    display: flex;
+    justify-content: center; /* Centers child elements horizontally */
+    margin-top: 20px; /* Adjust spacing between form and button */
+}
+
+
+.login-button {
+    background-color: var(--third-color);
+    color: #fff;
+    padding: 10px;
+    border: none;
+    border-radius: 15px;
+    cursor: pointer;
+    font-size: 16px;
+    margin-top: 10px; /* Adds some space between the button and date inputs */
+    width: 75px;
+    text-align: center;
+}
+
+.forgot-password a {
+        text-decoration: none;
+        color: var(--third-color);
+        font-weight: bold;
+    }
+.create-account a {
+        text-decoration: none;
+        color: var(--secondary-color);
+        font-weight: bold;
+        }
+
+.forgot-password {
+    margin-top: 6%;
+    margin-bottom: 3%;
+    text-align: center;
+    }
+.create-account {
+    text-align: center;
+    margin-bottom: 6%;
+    }
+
+    .modal {
+        display: none;
+        position: fixed;
+        z-index: 1;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        overflow: auto;
+        background-color: rgb(0, 0, 0);
+        background-color: rgba(0, 0, 0, 0.4);
+    }
+
+    .modal-content {
+        background-color: #fefefe;
+        margin: 15% auto;
+        padding: 20px;
+        border: 1px solid #888;
+        width: 80%;
+        max-width: 600px;
+        display: flex;
+        flex-direction: column;
+        max-height: 80%;
+    }
+
+    .modal-body {
+        flex: 1;
+        overflow-y: auto;
+        padding: 20px;
+    }
+
+    .modal-footer {
+        padding: 10px 20px;
+        border-top: 1px solid #888;
+        background-color: #f1f1f1;
+        display: flex;
+        justify-content: flex-end;
+    }
+
+    .close {
+        color: #aaa;
+        float: right;
+        font-size: 28px;
+        font-weight: bold;
+    }
+
+    .close:hover,
+    .close:focus {
+        color: black;
+        text-decoration: none;
+        cursor: pointer;
+    }
+
+    .error-message {
+        color: var(--secondary-color);
+        font-weight: bold;
+        align-items: center;
+        text-align: center;
+        display: none;
+    }
+
+/*--------------------------------------------Customer Index Screen--------------------------------------------------------*/
+
+.index-header-image {
+    width: 20%;
+    height: auto;
+    margin-left: 10%;
+    margin-right: 60%;
+    margin-top: 3%;
+    margin-bottom: 3%;
+    }
+
+
+.index-content {
+        margin-top: 12%;
+        background-color: white;
+    }
+
+.button-logout {
+    margin-top: 3%;
+    text-decoration: none;
+    color: var(--primary-color);
+    font-weight: bold;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.button-logout:hover {
+    color: var(--secondary-color);
+}
+
+.logo {
+    margin-top: 3%;
+    height: 70px;
+    width: 115px;
+    border-radius: 100%;
+}
+
+.user-info {
+    margin-top: 18%;
+    margin-bottom: 50%;
+    width: 100%;
+    text-align: left;
+    box-sizing: border-box;
+    background-color: white;
+    display: flex;
+    flex-direction: column;
+    justify-content: left;
+    padding-left: 6%;
+}
+
+
+.user-info span {
+    padding-right: 65%;
+    padding-left: 6%;
+    padding-top: 4%;
+    padding-bottom: 4%;
+    border-radius: 1%;
+    color: var(--third-color);
+    background-color: #e2e4fd;
+    font-weight: bold;
+    align-self: center;
+    font-size: 25px;
+    width: 100%;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+
+}
+
+.user-info h2 {
+    margin-bottom: 15%;
+}
+
+.user-info button {
+    color: var(--secondary-color);
+    background-color: white;
+    padding: 5px;
+    border: none;
+    border-radius: 15px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: bold;
+    width: 35%;
+    text-align: center;
+    margin-top: 2%;
+    margin-bottom: 7%;
+    align-items: left;
+    box-shadow: 1px 1px 2px 2px rgba(.1, .1, .1, .1);
+}
+
+.button-wrapper {
+        text-align: right;
+        position: absolute;
+        bottom: -20px;
+        right: 10px; /
+    }
+
+    .box-icon {
+        margin-left: 5px;
+    }
+
+.pwamodal {
+    display: none;
+    position: fixed;
+    z-index: 1;
+    left: 0;
+    top: 0;
+    width: 100%; /* Full width */
+    height: 100%; /* Full height */
+    overflow: auto; /* Enable scroll if needed */
+    background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
+}
+
+.modal-content {
+    background-color: #fefefe;
+    margin: 15% auto; /* 15% from the top and centered */
+    padding: 20px;
+    border: 1px solid #888;
+    width: 80%; /* Could be more or less, depending on screen size */
+}
+
+.close {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+}
+
+.close:hover,
+.close:focus {
+    color: black;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.pwaInstructions {
+    margin-top: 5%;
+    margin-bottom: 5%;
+}
+
+#reader {
+    margin-top: 3%;
+    width: 80%;
+    position: relative;
+    z-index: 1000;
+}
+
+/*-------------------------------------------Info Screen-------------------------------------------------------------*/
+.info-color {
+    color: var(--secondary-color);
+}
+/*-------------------------------------------Cusotmer Qr Scan Screen-------------------------------------------------*/
+
+#reader {
+    margin-top: 3%;
+    width: 100%;
+    height: auto;
+    }
+
+.qr-h1 {
+    text-align: center;
+}
+
+/*-------------------------------------------Customer Coupons Screen-------------------------------------------------*/
+.coupon-body {
+    background-color: white;
+}
+
+.rewards-header-container {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    top: 0;
+    left: 0;
+}
+
+    .spend-box {
+        margin-top: 18%;
+        padding: 8px;
+        padding-bottom: .25%;
+        background-color: #e2e4fd;
+        text-align: center;
+        font-size: 16px;
+        font-weight: bold;
+        color: var(--third-color);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+        }
+
+    .spend-box h4 {
+        font-size: 18px;
+        }
+
+    .spend-box button {
+        background-color: transparent;
+        border: none;
+        text-decoration: none;
+        color: black;
+        font-size: 16px;
+        cursor: pointer;
+        padding: 0;
+        }
+    .userSpend {
+        color: var(--secondary-color);
+        font-weight: bold;
+        }
+
+    .splitSpend {
+        font-weight: bold;
+        color: var(--third-color)
+    }
+
+    .coupon-content {
+        margin-top: 55%;
+        width: 100%;
+        box-sizing: border-box;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        background-color: white;
+        }
+
+.coupons-container {
+    background-color: white;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    padding: 2%;
+    margin: 2% auto;
+    margin-top: 8%;
+    margin-bottom: 8%;
+    width: 85%;
+    text-align: center;
+    }
+
+.coupons-container a {
+    text-decoration: none;
+    display: block;
+    transition: background-color 0.3s ease;
+    }
+
+.coupons-container a:hover {
+    background-color: #f0f0f0;
+    }
+
+.coupons-container h2 {
+    text-align: center;
+    font-size: 24px;
+    color: var(--secondary-color);
+    }
+
+.coupons-container p {
+    color: var(--third-color);
+    text-align: center;
+    }
+
+.price {
+    color: var(--secondary-color);
+    font-size: 20px;
+    text-align: center;
+    }
+
+/*-------------------------------------------Customer Transaction Screen------------------------------------------------*/
+.center-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.transaction-content {
+    width: 90%;
+    box-sizing: border-box;
+    }
+
+.transaction-container {
+    margin-top: 35%;
+    margin-bottom: 15%;
+    width: 98%;
+    display: flex;
+    flex-direction: column;
+    }
+
+.transaction-box {
+    background-color: white;
+    padding: 1%;
+    border: 1px solid #ddd;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+    width: 95%;
+    text-align: center;
+    margin-bottom: 5%;
+    align-items: center;
+    width: 100%;
+    }
+
+.transaction-box h2 {
+    text-align: center;
+    font-size: 24px;
+    color: var(--secondary-color);
+    }
+
+.transaction-box p {
+    color: var(--third-color);
+    font-size: 18px;
+    display: flex;
+    flex-wrap: nowrap;
+    justify-content: center;
+    width: 100%;
+    }
+
+.transaction-box hr {
+    width: 60%;
+}
+/*-------------------------------------------------Customer-QR-Coupon-Screen--------------------------------------------------------*/
+.qr-code {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+}
+
+
+/*------------------------------------------------Customer Payment Method Screen--------------------------------------------------*/
+
+.options-container {
+    max-width: 800px;
+    margin: 0 auto;
+    margin-top: 25%;
+    padding: 20px;
+    background-color: #fff;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    margin-bottom: 15%;
+    }
+
+.options-title h3 {
+    font-size: 1.2em;
+    margin-bottom: 20px;
+    color: var(--third-color);
+    font-weight: bold;
+    }
+
+.bank-option {
+    padding: 15px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    margin-bottom: 20px;
+    background-color: #fafafa;
+    }
+
+.bank-option p {
+    margin: 0 0 10px 0;
+    color: var(--third-color);
+    font-weight: bold;
+    }
+
+.bank-option-button {
+    display: inline-block;
+    padding: 10px 20px;
+    background-color: var(--third-color);
+    color: white;
+    font-weight: bold;
+    text-decoration: none;
+    border-radius: 5px;
+    transition: background-color 0.3s ease;
+        }
+
+.bank-option-button:hover {
+    background-color: var(--secondary-color);
+    }
+
+.bank-option-button {
+    border: none;
+    cursor: pointer;
+    }
+
+.platformSavings {
+    color: var(--secondary-color);
+    font-weight: bold;
+}
+
+.noFee {
+    color: var(--secondary-color);
+}
+
+.stripe-bank {
+    color: var(--secondary-color);
+}
+
+/*-------------------------------------------------Customer Load Balance Screen----------------------------------------------------*/
+
+.bank-payment-container {
+    background-color: white;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    padding: 2%;
+    border-radius: 8px;
+    margin: 2% auto;
+    margin-top: 35%;
+    width: 90%;
+    text-align: center;
+    align-items: center;
+    }
+
+.link-account-container {
+    background-color: white;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    padding: 2%;
+    border-radius: 8px;
+    margin: 2% auto;
+    margin-top: 35%;
+    width: 90%;
+    text-align: center;
+    }
+
+.payment-label {
+    font-size: 16px;
+    font-weight: bold;
+    color: var(--third-color);
+    text-align: center;
+    margin-top: 10%;
+    }
+
+.payment-p-tag {
+    font-size: 14px;
+    color: var(--third-color);
+    line-height: 1.5;
+    text-align: center;
+    margin-bottom: 7%;
+    }
+
+.proceed-payment-button {
+    background-color: var(--secondary-color);
+    color: #fff;
+    padding: 10px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    display: block;
+    margin: 0 auto;
+    margin-bottom: 3%;
+    width: 100px;
+    border-radius: 15px;
+    text-align: center;
+    }
+
+.proceed-payment-button:hover {
+    background-color: var(--primary-color);
+    }
+
+.cancel-payment-button {
+    background-color: var(--primary-color);
+    color: #fff;
+    padding: 10px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    display: block;
+    margin: 0 auto;
+    margin-bottom: 10%;
+    width: 100px;
+    border-radius: 15px;
+    text-align: center;
+    }
+
+.cancel-payment-button:hover {
+    background-color: var(--primary-color);
+    }
+
+/*-----------------------------------------------------------Customer Payment Screen-------------------------------------------------*/
+
+.business-payment {
+    text-align: center;
+    }
+
+
+
+.payment-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-top: 12%;
+
+}
+
+.payment-form {
+    background-color: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    width: 80%;
+    margin: 0;
+    }
+
+.payment-form input {
+        width: 80%;
+        padding: 10px;
+        margin-bottom: 16px;
+        border: 1px solid #ddd;
+        border-radius: 15px;
+        box-sizing: content-box;
+        margin-left: 0;
+        margin-right: 0;
+
+        background-color: white;
+        color: var(--third-color);
+        font-weight: 700;
+        font-size: 15px;
+    }
+
+.payment-form label {
+        display: block;
+        margin-bottom: 3px;
+        margin-left: 0;
+    }
+
+.payment-form h2 {
+    text-align: center;
+    color: var(--primary-color);
+    }
+
+.payment-form p {
+    text-align: center;
+    color: var(--secondary-color);
+    }
+
+.payment-form-submit-button {
+        background-color: var(--secondary-color);
+        color: #fff;
+        padding: 10px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 16px;
+        display: block;
+        margin: 0 auto;
+        margin-bottom: 4%;
+        width: 200px;
+        border-radius: 15px;
+        text-align: center;
+    }
+
+.payment-form-cancel-button {
+        background-color: var(--primary-color);
+        color: #fff;
+        padding: 10px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 16px;
+        display: block;
+        margin: 0 auto;
+        margin-bottom: 2%;
+        width: 200px;
+        border-radius: 15px;
+        text-align: center;
+    }
+
+.adjustPrice {
+    color: var(--secondary-color);
+}
+
+.tip-options {
+    display: flex;
+    align-items: center;
+    border-radius: 10px; /* Curved borders */
+    border: 1px solid #ccc; /* Border color */
+    background-color: white;
+    width: 90%;
+    margin-bottom: 20px; /* Space below the tip options */
+    padding: 3px; /* Padding around the container */
+
+}
+
+.tip-options label {
+    display: flex;
+    align-items: center;
+    justify-content: center; /* Center content horizontally */
+    padding: 0; /* Padding around labels */
+    cursor: pointer;
+    flex: 1; /* Make each label take equal space */
+    text-align: center; /* Center text within each label */
+    box-sizing: border-box; /* Include padding in the element's total width and height */
+}
+
+.tip-options input[type="radio"] {
+    display: none; /* Hide radio buttons */
+}
+
+.tip-options .tip-label {
+    margin: 0;
+    font-size: 10px;
+}
+
+.separator {
+    height: 30px; /* Adjust height as needed */
+    border-left: 1px solid #ccc; /* Separator line */
+    margin: 0;
+}
+
+/* Style for highlighting the selected tip option */
+.tip-options input[type="radio"]:checked + .tip-label {
+    background-color: var(--secondary-color);
+    color: white; /* Highlight background color */
+    border-radius: 5px;
+}
+
+
+/*---------------------------------------------Customer Payment Processing Screen---------------------------------------*/
+
+.processing-container {
+    background-color: white;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    padding: 2%;
+    border-radius: 8px;
+    margin: 2% auto;
+    width: 90%;
+    text-align: left;
+    font-weight: bold;
+    margin-top: 12%;
+    margin-bottom: 20%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    }
+
+.processing-container h1 {
+    color: var(--secondary-color);
+    margin-top: 22%;
+    text-align: center;
+    }
+
+.processing-container p {
+    color: var(--third-color);
+    }
+
+.processing-container button {
+    max-width: 40%;
+}
+/*---------------------------------------------Customer Payment Success Screen------------------------------------------*/
+
+.success-container {
+    background-color: white;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    padding: 2%;
+    border-radius: 8px;
+    margin-top: 40%;
+    margin-bottom: 3%;
+    width: 90%;
+    text-align: center;
+    font-weight: bold;
+    }
+
+.success-container h1 {
+    color: var(--secondary-color);
+    }
+
+.success-container p {
+    color: var(--third-color);
+    }
+
+.success-button {
+    color: var(--third-color);
+    width: 30%;
+}
+
+/*--------------------------------------------Business Create Account Screen--------------------------------------------*/
+.business-create-form {
+    margin: 25%;
+}
+.business-register-button {
+    background-color: var(--secondary-color);
+    color: #fff;
+    padding: 10px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    display: block;
+    margin: 0 auto;
+    margin-bottom: 3%;
+    width: 100px;
+    border-radius: 15px;
+    text-align: center;
+    }
+
+.business-register-button:hover {
+    background-color: var(--primary-color);
+    }
+
+.business-register-cancel-button {
+    background-color: var(--primary-color);
+    color: #fff;
+    padding: 10px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    display: block;
+    margin: 0 auto;
+    margin-bottom: 10%;
+    width: 100px;
+    border-radius: 15px;
+    text-align: center;
+    }
+
+.business-register-cancel-button:hover {
+    background-color: var(--primary-color);
+    }
+/*---------------------------------------------Business Login Screen----------------------------------------------------*/
+
+.business-login-page-title {
+    margin-top: 8%;
+    padding: 3%;
+    font-size: 22px;
+    font-weight: bold;
+    margin-bottom: 5%;
+    text-align: center;
+    }
+
+
+.business-login-form {
+    background-color: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    width: 75%;
+    margin: 1% auto;
+    margin-top: 5%;
+    }
+
+.business-login-form p {
+        text-align: center;
+        margin-bottom: 8%;
+    }
+
+.forgot-password a {
+    text-decoration: none;
+    color: var(--third-color);
+    font-weight: bold;
+}
+.create-account a {
+    text-decoration: none;
+    color: var(--secondary-color);
+    font-weight: bold;
+    }
+
+.forgot-password {
+    margin-top: 6%;
+    margin-bottom: 3%;
+    text-align: center;
+    }
+
+.create-account {
+    text-align: center;
+    }
+/*-------------------------------------------------Business Index Screen--------------------------------------------------*/
+
+.business-index-content {
+    padding: 3%;
+    margin-top: 20%;
+    margin-bottom: 5%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    }
+
+.business-index-container {
+    background-color: white;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    padding: 2%;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-around;
+    align-items: center;
+    text-align: center;
+    margin-bottom: 0%;
+    width: 90%;
+    }
+
+.business-index-container a {
+    text-decoration: none;
+    color: var(--secondary-color);
+    font-weight: bold;
+    display: block;
+    padding: 1%;
+    background-color: white;
+    }
+
+.business-announcements {
+    background-color: white;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    padding: 2%;
+    border-radius: 8px;
+    margin: 2% auto;
+    width: 90%;
+    text-align: center;
+    }
+
+.business-announcements h2 {
+    margin: 0 0 10px;
+    color: var(--third-color);
+    }
+
+.business-announcements p {
+    margin: 0 0 10px;
+    color: var(--third-color);
+    }
+
+.stripe-account-warning {
+    margin-top: 15px;
+    margin-bottom: 15px;
+    color: var(--secondary-color);
+    text-align: center;
+    font-weight: bold;
+}
+
+.stripe-account-warning a {
+    text-decoration: none;
+}
+
+.stripe-account-warning-button {
+    background-color: var(--secondary-color);
+    color: #fff;
+    padding: 10px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    display: block;
+    margin: 0 auto;
+    margin-bottom: 2%;
+    width: 40%;
+    border-radius: 15px;
+    text-align: center;
+    }
+
+.business-pending-payout {
+
+    padding: 1%;
+    margin: 2% auto;
+    margin-top: 0%;
+    width: 90%;
+    text-align: center;
+    }
+
+.business-pending-payout p {
+    color: var(--secondary-color);
+    font-weight: bold;
+    }
+/*----------------------------------------------Business Coupon Screen--------------------------------------------*/
+
+.business-coupon-content {
+    padding: 5%;
+    margin-top: 20%;
+    margin-bottom: 10%;
+    width: 90%;
+    justify-content: center;
+    align-items: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background-color: white;
+    }
+
+.business-coupon-form {
+    background-color: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    width: 90%;
+    margin: 1% auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    }
+
+.business-coupon-form label {
+    margin-top: 4%;
+    font-size: 18px;
+    color: var(--secondary-color);
+    width: 100%;
+    }
+
+.business-coupon-form textarea {
+    font-size: 16px;
+    color: var(--third-color);
+    width: 100%;
+    max-width: 100%;
+    margin-top: 10px;
+    padding: 10px;
+    box-sizing: border-box;
+    }
+
+.business-coupon-button,
+.business-coupon-cancel-button {
+    background-color: var(--secondary-color);
+    color: #fff;
+    padding: 10px;
+    border: none;
+    cursor: pointer;
+    font-size: 16px;
+    display: block;
+    margin: 0 auto;
+    margin-bottom: 2%;
+    width: 40%;
+    border-radius: 15px;
+    text-align: center;
+    }
+
+.business-coupon-button:hover {
+    background-color: var(--primary-color);
+    }
+
+.business-coupon-cancel-button {
+    background-color: var(--primary-color);
+    }
+
+.business-coupon-cancel-button:hover {
+    background-color: var(--secondary-color);
+    }
+
+/*--------------------------------------------------Business Transaction Screen-----------------------------------*/
+
+.business-transaction-refresh-button {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 5%;
+    }
+
+.transaction-refresh-button {
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    border: white;
+    }
+
+    .business-transaction-content {
+        margin-top: 25%;
+        margin-bottom: 10%;
+        width: 100%;
+        display: flex; /* Flexbox for alignment */
+        flex-direction: column; /* Stack children vertically */
+        justify-content: center; /* Center along the main axis */
+        align-items: center; /* Center along the cross axis */
+        box-sizing: border-box;
+        background-color: white;
+    }
+
+    .business-transaction-container {
+        width: 100%; /* Matches parent width */
+        display: flex;
+        flex-direction: column; /* Stack transaction boxes */
+        align-items: center; /* Centers boxes horizontally */
+        margin: 0 auto; /* Centers the container itself */
+        box-sizing: border-box;
+    }
+
+    .business-transaction-box {
+        background-color: #fff;
+        padding: 1%;
+        border: 1px solid #ddd;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        border-radius: 8px;
+        width: 90%; /* Makes the box responsive */
+        max-width: 500px; /* Restricts excessive width on large screens */
+        text-align: center; /* Centers text inside the box */
+        margin: 10px auto; /* Centers the box and adds spacing */
+    }
+
+
+
+.business-transaction-box h2 {
+    text-align: center;
+    font-size: 24px;
+    color: var(--secondary-color);
+    }
+
+.business-transaction-box p {
+    color: var(--third-color);
+    font-size: 18px;
+    display: flex;
+    flex-wrap: nowrap;
+    justify-content: center;
+    width: 100%;
+    }
+/*----------------------------------------------Business Report Screen-------------------------------------------------*/
+
+.business-report-content {
+    padding: 3%;
+    margin-top: 25%;
+    margin-bottom: 20%;
+    display: flex;
+    flex-direction: column;
+    align-items: center; /* Centers content horizontally */
+}
+
+.business-report-date-selector {
+    margin-bottom: 3%;
+    font-weight: bold;
+}
+
+.button {
+    background-color: var(--secondary-color);
+    color: #fff;
+    padding: 10px;
+    border: none;
+    border-radius: 15px;
+    cursor: pointer;
+    font-size: 16px;
+    margin-top: 10px; /* Adds some space between the button and date inputs */
+    width: 75px;
+    text-align: center;
+}
+
+.button:hover {
+    background-color: var(--primary-color);
+}
+
+
+.business-report-container {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-around;
+    margin-top: 10%;
+    }
+
+.report-item {
+    background-color: #fff;
+    padding: 10px;
+    border: 1px solid #ddd;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+    width: 45%; /* Adjust width to fit two items per row */
+    margin: 10px 0;
+    box-sizing: border-box;
+    text-align: center;
+    }
+
+.report-item  {
+    font-size: 18px;
+    color: var(--secondary-color);
+    margin-bottom: 5px;
+    font-weight: bold;
+    }
+
+.report-title {
+    color: var(--third-color);
+    }
+/*-----------------------------------------Business Payment Account Screen--------------------------------------------*/
+
+.bank-button{
+    background-color: var(--secondary-color);
+    color: #fff;
+    padding: 10px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    display: block;
+    margin: 0 auto;
+    margin-bottom: 5%;
+    width: 200px;
+    border-radius: 15px;
+    text-align: center;
+    }
+
+.bank-button:hover {
+    background-color: var(--primary-color);
+    }
+
+
+.account-button {
+    background-color: var(--secondary-color);
+    color: #fff;
+    padding: 10px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    display: block;
+    margin: 0 auto;
+    margin-bottom: 2%;
+    width: 100px;
+    border-radius: 15px;
+    text-align: center;
+    }
+
+.account-button:hover {
+    background-color: var(--primary-color);
+    }
+
+.cancel-account-button {
+    background-color: var(--primary-color);
+    color: #fff;
+    padding: 10px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    display: block;
+    margin: 0 auto;
+    margin-bottom: 2%;
+    width: 100px;
+    border-radius: 15px;
+    text-align: center;
+    }
+
+.cancel-account-button:hover {
+    background-color: var(--secondary-color);
+    }
+
+/*---------------------------------------Business checkout screen-----------------------------------------------------*/
+.body-business-checkout {
+    font-family: Arial, sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    width: 100%;
+    margin: 0;
+    background-color: #f4f4f4;
+}
+
+.checkout-container {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+
+
+}
+
+#amount-box {
+    font-size: 36px;
+    font-weight: bold;
+    padding: 20px;
+    border: 2px solid #ccc;
+    border-radius: 10px;
+    width: 250px;
+    margin-bottom: 20px;
+    background-color: white;
+    cursor: pointer;
+}
+
+#calculator {
+    padding: 10px;
+    background-color: #fff;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+    margin-bottom: 5%;
+}
+
+.calc-button {
+    width: 60px;
+    height: 60px;
+    margin: 5px;
+    font-size: 24px;
+    cursor: pointer;
+    color: var(--third-color);
+}
+
+.qr-btn {
+    font-size: 20px;
+    padding: 15px 30px;
+    background-color: var(--secondary-color);
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.tap-btn {
+    font-size: 20px;
+    padding: 15px 30px;
+    background-color: var(--third-color);
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.checkout-btn-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 35%;
+}
+
+.qr-icon-business-checkout {
+    cursor: pointer;
+    width: 10%;
+    height: auto;
+    border-radius: 8%;
+    align-items: center;
+}
+
+.qr-container-business-checkout {
+    margin-top: 3%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font: bold;
+    overflow: visible;
+    position: relative;
+    width: 100%;
+    height: auto;
+    }
+
+    .qr-business-checkout-modal {
+        display: none; /* Hidden by default */
+        position: fixed;
+        z-index: 1; /* Sit on top */
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        overflow: auto; /* Enable scroll if needed */
+        background-color: rgb(0, 0, 0); /* Fallback color */
+        background-color: rgba(0, 0, 0, 0.4); /* Black w/ opacity */
+    }
+
+    .qr-business-checkout-modal-content {
+        background-color: #fefefe;
+        margin: 15% auto; /* 15% from the top and centered */
+        padding: 20px;
+        border: 1px solid #888;
+        width: 80%; /* Could be more or less, depending on screen size */
+        height: auto;
+        position: relative; /* This makes the close button position relative to the modal content */
+    }
+
+    .qr-business-checkout-close {
+        color: black;
+        font-size: 28px;
+        font-weight: bold;
+        position: absolute;
+        top: 10px; /* Distance from the top */
+        right: 20px; /* Adjust to move the close button more to the left */
+        cursor: pointer;
+    }
+
+    .qr-business-checkout-close:hover,
+    .qr-business-checkout-close:focus {
+        color: black;
+        text-decoration: none;
+        cursor: pointer;
+    }
+
+
+    /* QR reader styles */
+    #reader-business-checkout {
+        width: 100%;
+        height: auto;
+    }
+/*-------------------------------------Business Charge Page-----------------------------------------------------------*/
+
+.business-charge-content {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 100vh; /* Full viewport height */
+    margin: 0;
+    padding: 0;
+    text-align: center;
+}
+
+/*---------------------------------------Business Landing Page--------------------------------------------------------*/
+
+.business-landing-span-text {
+    display: inline-block;
+    margin-bottom: 2%;
+    margin-top: 2%;
+    border: 1px solid var(--secondary-color);
+    border-radius: 10%;
+        }
+
+.business-landing-span-text a {
+    display: inline-block;
+    text-decoration: none;
+    color: inherit;
+    border-radius: 10%;
+    border: 1px solid var(--secondary-color);
+        }
+
+.business-landing-span-text a:hover {
+    background-color: #f0f0f0;
+        }
+
+
+.business-landing-title {
+    background-color: #edf1f4;
+    padding: 2%;
+    border-radius: 8px;
+    margin: 2% auto;
+    width: 90%;
+    text-align: center;
+    padding: 3%;
+    font-size: 16px;
+    font-weight: bold;
+    text-align: center;
+    color: var(--third-color);
+    font-size: 18px;
+        }
+
+.business-landing-text {
+    background-color: white;
+    padding: 2%;
+    border-radius: 8px;
+    margin: 2% auto;
+    width: 90%;
+    text-align: center;
+    margin-top: 2%;
+    font-size: 18px;
+    font-weight: bold;
+    margin-bottom: 2%;
+    text-align: left;
+    color: var(--third-color);
+        }
+
+.biz-landing-page {
+        padding-top: 8%;
+        display: block;
+        text-decoration: none;
+        }
+
+.biz-landing-page2 {
+        display: block;
+        text-decoration: none;
+        }
+
+.biz-landing-page img {
+        width: 95%;
+        margin-right: 2.5%;
+        margin-left: 2.5%;
+        height: auto;
+        background-size: cover;
+        background-position: center;
+        }
+
+.biz-landing-page2 img {
+        width: 100%;
+        height: auto;
+        background-size: cover;
+        background-position: center;
+        }
+.biz-landing-hero {
+    width: 100;
+    height: auto;
+    display: block;
+}
+
+.biz-landing-hero img {
+    width: 100%;
+    height: auto;
+    background-position: center;
+    background-size: cover;
+}
+
+.email {
+    color: var(--secondary-color);
+        }
+
+.button-container {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    margin-top: 15px;
+}
+
+.business-landing-form {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    margin: 20px auto;
+    margin-bottom: 0%;
+    margin-top: 0%;
+    width: 100%;
+    background-color: white;
+  }
+
+.business-landing-form form {
+    margin-top: 10%;
+}
+
+.business-landing-form p {
+    margin-left: 3%;
+    margin-right: 3%;
+}
+
+.business-landing-form button {
+    background-color: #132b62;
+    color: #ffffff;
+    border: none;
+    padding: 10px 20px;
+    font-size: 16px;
+    cursor: pointer;
+    border-radius: 10px;
+    transition: background-color 0.3s ease;
+    margin-bottom: 12%;
+}
+
+.business-landing-section {
+    padding-left: 4%;
+    padding-right: 4%;
+    color: black;
+    font: bold;
+}
+
+.slider-container {
+    position: relative;
+    max-width: 100%;
+    margin: auto;
+    overflow: hidden;
+}
+
+.slider img {
+    width: 100%;
+    display: none;
+}
+
+.slider img:first-child {
+    display: block;
+}
+
+
+/*------------------------------------------------Customer Landing Page--------------------------------------------------*/
+
+.content-landing {
+    margin: 0;
+    padding: 0;
+    overflow-y: auto; /* Enables vertical scrolling for multiple sections */
+    width: 100vw; /* Full width to occupy the viewport */
+    font-family: Arial, sans-serif;
+    background-color: white;
+}
+
+
+.top-of-customer-landing {
+    display: flex;
+    flex-wrap: nowrap; /* Prevents wrapping */
+    width: 100%;
+    padding: 10px; /* Adjust padding for consistent spacing */
+}
+
+#Home {
+    background-color: white;
+}
+
+.landing-section-image {
+    width: 100%;
+    max-width: 800px; /* Set a maximum width */
+    height: auto; /* Maintain aspect ratio */
+    display: block; /* Prevent inline spacing issues */
+    margin: 0 auto; /* Center the image */
+}
+
+.bottom-of-customer-landing {
+    display: flex;
+    align-items: center; /* Vertically centers the spans */
+    justify-content: space-evenly; /* Equal space between spans and at edges */
+    flex-wrap: nowrap; /* Prevents wrapping */
+    width: 100%;
+    background-color: #e2e4fd;
+    padding: 10px; /* Adjust padding for consistent spacing */
+}
+
+
+.landing-span-text {
+    display: inline-block;
+    margin-bottom: 2%;
+    margin-top: 2%;
+    border-radius: 10%;
+    }
+
+.landing-span-text a {
+    display: inline-block;
+    text-decoration: none;
+    border-radius: 10%;
+    color: #132b62;
+    }
+
+.landing-page-text {
+    background-color: #edf1f4;
+    padding: 3%;
+    padding-left: 5%;
+    margin-right: 2%;
+    margin-left: 2%;
+    font-weight: bold;
+    border-radius: 2%;
+    font-size: 18px;
+    }
+
+.span-business {
+        display: inline-block;
+        color: #132b62;
+    }
+
+.span-business a {
+        display: inline-block;
+        padding: 5px;
+        text-decoration: none;
+        color: inherit;
+    }
+
+.customer-landing-page {
+        display: block;
+        text-decoration: none;
+        }
+
+.customer-landing-page {
+        display: block;
+        text-decoration: none;
+        }
+
+.customer-landing-page img {
+        width: 100%;
+        height: auto;
+        background-size: cover;
+        background-position: center;
+        }
+
+
+.user-agreement-text {
+        text-decoration: none;
+        color: var(--third-color);
+    }
+
+.privacy-policy-text {
+        text-decoration: none;
+        color: var(--third-color);
+    }
+
+.centered-text {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        text-align: center;
+        background-color: white;
+
+    }
+
+.white-box {
+   background-color: white;
+   padding: 5%;
+   box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+   border-radius: 6px;
+}
+
+
+.sign-up-button-container {
+    display: flex;
+    justify-content: center;
+    background-color: white;
+}
+.sign-up-button {
+    background-color: #ff57ab; /* Bright pink */
+    color: white;
+    padding: 12px 24px;
+    font-family: sans-serif;
+    font-weight: bold;
+    font-size: 80%;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+
+}
+
+.sign-up-button:hover {
+    background-color: #ff1493; /* Slightly lighter pink on hover */
+}
+
+/*----------------------------------------For A Business Screen-----------------------------------------------------------*/
+/* Content container styling */
+.content {
+    margin: 0;
+    padding: 0;
+    overflow-y: auto; /* Enables vertical scrolling for multiple sections */
+    width: 100vw; /* Full width to occupy the viewport */
+    font-family: Arial, sans-serif;
+    background-color: white;
+}
+
+/* Section styling */
+.content section {
+    position: relative;
+    width: 100%;   /* Full width of each section */
+    display: flex;
+    align-items: center; /* Center content vertically */
+    justify-content: center; /* Center content horizontally */
+    overflow: hidden; /* Prevents content from spilling outside */
+}
+
+#Business {
+    background-color: white;
+}
+
+.business-page-p {
+    text-align: center;
+}
+
+.business-section-image {
+    width: 100%;
+    max-width: 900px; /* Set a maximum width */
+    height: auto; /* Maintain aspect ratio */
+    display: block; /* Prevent inline spacing issues */
+    margin: 0 auto; /* Center the image */
+}
+
+/* Button styling */
+.section-button {
+    position: absolute;
+    bottom: 10%; /* Distance from the bottom of the section */
+    right: 25%;   /* Adjust to position within the section */
+    padding: 10px 20px;
+    font-size: 16px;
+    background-color: #2f669a;
+    color: white;
+    border: none;
+    cursor: pointer;
+    border-radius: 5px;
+    box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.2);
+    transition: background-color 0.3s;
+    z-index: 1;
+}
+
+
+header {
+    background-color: white;
+    color: var(--third-color);
+    padding: 2px;
+    text-align: center;
+}
+
+header p {
+    margin-bottom: 15%;
+    font-size: 24px;
+    font-style: italic;
+    color: var(--secondary-color);
+}
+
+.img-background {
+    background-color: white;
+}
+.header-image {
+    display: block;
+    margin: 0 auto 0; /* Centers image & adds space below */
+    width: 150px; /* Adjust as needed */
+    height: auto; /* Maintains aspect ratio */
+    padding-top: 10%;
+    border-radius: 10%;
+}
+
+.cta-button {
+    background-color: var(--third-color);
+    color: white;
+    padding: 10px 40px;
+    text-decoration: none;
+    border-radius: 5px;
+    transition: background 0.3s;
+    margin-top: 3%;
+
+}
+
+.cta-button:hover {
+    background: var(--third-color);
+}
+
+main {
+    max-width: 1000px;
+    margin: 20px auto;
+    padding: 20px;
+    align-items: center;
+}
+
+.features {
+    display: flex;
+    justify-content: space-around;
+    margin-bottom: 20px;
+}
+
+.feature-item {
+    background: white;
+    border-radius: 10px;
+    padding: 20px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    flex-basis: 30%;
+
+}
+
+.feature-item h2 {
+    color: var(--secondary-color);
+    text-align: center;
+    font-size: 22px;
+}
+
+.feature-item p {
+    font-size: 20px;
+}
+
+.signup {
+    background: #ffffff;
+    border-radius: 10px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    text-align: center;
+    display: flex;  /* Makes sure content stacks */
+    flex-direction: column;  /* Ensures text is above the form */
+    align-items: center;  /* Centers everything */
+    padding-bottom: 20px;
+}
+
+
+.signup-text {
+    font-size: 24px;
+    font-weight: bold;
+    text-align: center; /* Ensures text is centered */
+    width: 100%; /* Makes sure it takes up full width */
+    display: block; /* Ensures it behaves like a block element */
+    margin-bottom: 15px; /* Space between text and form */
+}
+
+
+.signup form {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.signup input {
+    margin: 10px 0;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    width: 80%;
+    max-width: 400px;
+}
+
+
+footer {
+    text-align: center;
+    padding: 10px;
+    background: #2c3e50;
+    color: white;
+    position: relative;
+    bottom: 0;
+    width: 100%;
+}
+
+@media (max-width: 768px) {
+    .features {
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .feature-item {
+        background: white;
+        width: 80%;
+        margin-bottom: 25px;
+        border-radius: 10px;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, .2);
+      }
+}
+
+/* Responsive layout for larger screens */
+@media (min-width: 768px) {
+    .features {
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 20px;
+    }
+
+    .feature-item {
+        flex: 1 1 calc(33.33% - 40px); /* 3 per row on desktop */
+        background: #ffffff;
+        border: 1px solid #ddd;
+        border-radius: 10px;
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25); /* Enhanced shadow for desktop */
+    }
+
+    .signup form {
+        width: 70%;
+    }
+
+    textarea {
+        width: 100% !important;
+    }
+}
+
+@media (min-width: 1024px) {
+    .feature-item {
+        flex: 1 1 calc(33.33% - 40px); /* 3 per row on desktop */
+        background: #ffffff;
+        border: 1px solid #ddd;
+        border-radius: 10px;
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25); /* Enhanced shadow for desktop */
+    }
+
+    header p {
+        font-size: 3rem;
+        margin-bottom: 3%;
+    }
+
+    .header-image {
+        width: 300px;
+    }
+
+    main {
+        padding: 40px;
+    }
+
+    .signup form input,
+    .signup form textarea {
+        font-size: 1.1rem;
+    }
+
+    .cta-button {
+        font-size: 1.1rem;
+        padding: 12px 50px;
+    }
+}
+
+
+
+/*---------------------------------------------------For a Customer Screen---------------------------------------------*/
+.customer-content {
+    background-color: white;
+}
+
+#Customer {
+    background-color: white;
+}
+
+.customer-section-image {
+    width: 100%;
+    max-width: 900px; /* Set a maximum width */
+    height: auto; /* Maintain aspect ratio */
+    display: block; /* Prevent inline spacing issues */
+    margin: 0 auto; /* Center the image */
+}
+
+.customer-button-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-top: 2%;
+    margin-bottom: 20%;
+    background-color: white;
+}
+.customer-section-button {
+    padding: 10px 20px;
+    font-size: 16px;
+    background-color: #152d64;
+    color: white;
+    border: none;
+    cursor: pointer;
+    border-radius: 5px;
+    box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.2);
+    transition: background-color 0.3s;
+}
+
+@media screen and (min-width: 1024px) {
+    .customer-section-button {
+        padding: 30px 40px; /* Bigger padding for a larger button */
+        width: 80%; /* Increase button size */
+        border-radius: 25px;
+        font-size: 175%; /* Larger font size */
+        background-color: #152d64; /* Button color */
+        color: white; /* Text color */
+        border: none; /* Remove border */
+        cursor: pointer;
+        box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.2); /* Subtle shadow */
+        transition: background-color 0.3s; /* Smooth hover effect */
+    }
+}
+/*-----------------------------------------------------User Agreement Screen------------------------------------------*/
+
+.agreement-container {
+    line-height: 1.6;
+    margin: 0;
+    padding: 0;
+    background-color: #f4f4f4;
+    color: #333;
+    max-width: 800px;
+    margin: 20px auto;
+    padding: 20px;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    }
+
+.agreement-container h1, h2 {
+    color: #333;
+    }
+
+.agreement-container ul {
+    list-style-type: disc;
+    margin-left: 20px;
+    }
+
+.agreement-container p {
+    margin: 10px 0;
+    }
+
+.contact-info {
+    margin-top: 20px;
+    font-style: italic;
+    }
+/*--------------------------------------------------Prospect Submitted Screen---------------------------------------------*/
+
+.return-button {
+    background-color: #007BFF; /* Button color */
+    color: white;
+    padding: 10px 20px;
+    font-size: 16px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    text-align: center;
+    }
+
+.return-button:hover {
+    background-color: #0056b3; /* Darker color on hover */
+    }
+
+.button-container {
+    text-align: center;
+    margin-top: 20px;
+    }
+/*---------------------------------------------------Forgot Password Screen-------------------------------------*/
+.Reset-form {
+    margin-top: 30%;
+}
+
+/*-------------------------------------Contact Us Screen----------------------------------------------------------*/
+
+.Contact-us {
+    text-align: center;
+    margin-top: 1%;
+    margin-bottom: 5%;
+    background-color: #e2e4fd;
+    border-radius: 8px;
+    padding-bottom: 1%;
+    padding-top: 1%;
+}

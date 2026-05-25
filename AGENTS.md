@@ -25,7 +25,7 @@ This file is for both implementation agents and review agents.
 
 - Private backend development happens in `Split`.
 - This repo is a public publication target for backend code that is ready to be exposed.
-- It should stay focused on the mobile app platform backend surface, not the broader hosted marketing/admin/legal/tax website layer.
+- It should stay focused on the mobile app platform backend surface and the hosted Split pages that are part of the current backend snapshot, not unrelated private operations or separate applications.
 - `Split Rewards Public` plays the same role for the iOS app.
 - A public Android repo is planned later and should follow the same model.
 
@@ -53,7 +53,7 @@ If you are reviewing this repo:
 - Before publishing here, check for secrets, internal-only notes, private support docs, credentials, and staging-only material.
 - Keep `.env`, production secrets, private keys, internal incident notes, and unpublished operational details out of this repo.
 - Prefer public-safe defaults and examples over internal real-world config.
-- Exclude hosted marketing pages, admin pages, legal/contact site templates, and the separate tax web application unless the user explicitly wants them published here.
+- Exclude private admin tooling, unpublished operational pages, internal support material, and separate applications unless the user explicitly wants them published here.
 - Make sure README and public docs accurately describe the repo’s public role and limitations.
 
 ## Private-To-Public Sync Workflow
@@ -69,7 +69,7 @@ When updating this public repo from private:
 - update those docs only as needed to reflect new code or changed behavior
 - keep public-safe config examples and placeholders instead of replacing them with internal real values
 - remove or replace brand-specific defaults when they are not needed for public transparency
-- exclude private operational notes, staging-only material, local-only config, unpublished support context, and hosted website-only assets or templates
+- exclude private operational notes, staging-only material, local-only config, unpublished support context, and unrelated website-only assets or templates
 
 Default review stance during a sync:
 
@@ -87,6 +87,9 @@ Default review stance during a sync:
 - `auth/`: wallet-auth nonce and signature verification helpers
 - `integrations/`: infrastructure integrations
 - `rewards/`: reward logic helpers
+- `merchant/`: merchant wallet-auth helpers
+- `services/`: integrations and background job helpers
+- `views/`: hosted page templates included in the public backend snapshot
 - `tests/`: backend tests
 - `.env.example`: public-safe configuration surface
 

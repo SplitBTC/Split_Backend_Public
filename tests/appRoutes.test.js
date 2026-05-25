@@ -59,12 +59,20 @@ test('GET /health returns ok JSON without booting Mongo', async (t) => {
   });
 });
 
-test('GET / returns backend API descriptor JSON', async (t) => {
+test('GET / renders the Home page', async (t) => {
   await maybeWithServer(t, async ({ baseUrl }) => {
     const response = await fetch(`${baseUrl}/`);
-    const body = await response.json();
+    const body = await response.text();
 
     assert.equal(response.status, 200);
-    assert.deepEqual(body, { ok: true, service: 'split-backend-public' });
+    assert.match(body, /<title>Split \| Bitcoin<\/title>/);
+  });
+});
+
+test('GET /bitcoin-tax is not hosted by this backend', async (t) => {
+  await maybeWithServer(t, async ({ baseUrl }) => {
+    const response = await fetch(`${baseUrl}/bitcoin-tax`);
+
+    assert.equal(response.status, 404);
   });
 });

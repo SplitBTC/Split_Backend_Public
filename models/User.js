@@ -30,58 +30,10 @@ const userSchema = new mongoose.Schema(
       default: null,
     },
 
-    messagingPubkey: {
-      type: String,
-      default: null,
-      index: true,
-    },
-
     messagingPubkeyV2: {
       type: String,
       default: null,
       index: true,
-    },
-
-    messagingKeySignature: {
-      type: String,
-      default: null,
-    },
-
-    messagingKeySignatureVersion: {
-      type: Number,
-      default: null,
-    },
-
-    messagingKeySignedAt: {
-      type: Date,
-      default: null,
-    },
-
-    messagingKeyUpdatedAt: {
-      type: Date,
-      default: null,
-    },
-
-    // During the signed-identity migration we keep the old messaging-key-only
-    // proof fields above and add the new bundle proof fields below.
-    messagingIdentitySignature: {
-      type: String,
-      default: null,
-    },
-
-    messagingIdentitySignatureVersion: {
-      type: Number,
-      default: null,
-    },
-
-    messagingIdentitySignedAt: {
-      type: Date,
-      default: null,
-    },
-
-    messagingIdentityUpdatedAt: {
-      type: Date,
-      default: null,
     },
 
     messagingIdentityV2Signature: {
