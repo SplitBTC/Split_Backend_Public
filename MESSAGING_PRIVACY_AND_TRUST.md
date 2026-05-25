@@ -1,330 +1,165 @@
 # Split Messaging Privacy and Trust
 
-This document describes the current Split messaging system as implemented in the Split backend and iOS client.
+This document describes the current Split messaging system.
 
-It is written for technical users who care about privacy, trust minimization, and honest threat-model boundaries.
+## Summary
 
-It is not a marketing claim, and it is not a third-party security audit.
-
-## At a Glance
-
-Split messaging currently provides:
+Split messaging provides:
 
 - end-to-end encryption for message bodies
-- end-to-end encryption for attachment bytes
-- wallet-signed identity binding between:
-  - wallet pubkey
-  - Lightning address
-  - messaging pubkey
-- client-side verification of recipient directory proofs
-- client-side verification of sender-authenticated message envelopes
+- client-side encryption for attachments before upload
+- wallet-signed binding between wallet pubkey, Lightning address, and messaging pubkey
+- client verification of recipient directory proofs
+- signed APNs/FCM device registration
+- relay cleanup for acknowledged, expired, failed, and received items
 
-Split messaging does **not** currently provide:
+Split messaging does not currently provide:
 
 - metadata privacy from the Split relay
-- an independently witnessed or gossip-backed directory
-- Signal-style forward secrecy / double ratchet
+- independent directory witnesses
+- Signal-style double-ratchet forward secrecy
 - deniable authentication
 - censorship resistance
 
-The simplest accurate description is:
+Short version:
 
-> authenticated end-to-end encryption with a client-verified server directory
+> Split messaging is authenticated end-to-end encrypted messaging with a client-verified server directory and visible relay metadata.
 
-## What Problem This Design Solves
+## Identity
 
-The current design is trying to minimize trust in the Split backend for two specific problems:
-
-1. The server should not be able to silently substitute a fake recipient messaging key or wallet identity.
-2. The server should not be able to silently forge a sender-authenticated message.
-
-That is the center of gravity of the current protocol.
-
-The design is **not** primarily trying to hide:
-
-- who is talking to whom
-- when they are talking
-- which Lightning address is being resolved
-- which user account submitted the message
-
-## Architecture Overview
-
-### 1. Wallet-signed identity binding
-
-Each messaging identity binding contains:
+Each messaging identity contains:
 
 - `walletPubkey`
 - `lightningAddress`
 - `messagingPubkey`
-- `signedAt`
-- `version`
-- wallet signature over the canonical message
+- `messagingIdentitySignature`
+- `messagingIdentitySignatureVersion`
+- `messagingIdentitySignedAt`
 
-The important trust property here is that the wallet signs the binding.
+The mobile client creates or restores the messaging key locally. The wallet signs the identity binding locally. The backend verifies that wallet signature before accepting the binding.
 
-The backend verifies that signature before accepting the identity update.
+Accepted bindings are stored on the user record and appended to the messaging directory log.
 
-For v2:
+## Directory
 
-- the iOS client derives `walletPubkey` and `lightningAddress` locally from the wallet SDK
-- the client creates or restores its messaging private key locally
-- the wallet signs the binding locally
-- the backend stores the verified binding and updates its cached user record from that signed binding
+Recipients are resolved through `/messaging/v3/directory/lookup`.
 
-### 2. Server-hosted Merkle directory
+The backend returns the recipient's wallet-signed binding, a Merkle inclusion proof, and a checkpoint containing `rootHash`, `treeSize`, and `issuedAt`.
 
-Accepted v2 bindings are appended to a backend binding log.
+The client verifies the binding and proof before using the recipient messaging key.
 
-The backend computes a Merkle root over the current log and returns:
+Important limit: Split operates the directory. There is no external witness, gossip system, or public transparency monitor today.
 
-- the resolved recipient binding
-- the binding leaf hash
-- the inclusion proof
-- a checkpoint:
-  - `rootHash`
-  - `treeSize`
-  - `issuedAt`
+## Messages
 
-The client verifies:
+Messages are sent through `/messaging/v3/send` and fetched through `/messaging/v3/inbox`.
 
-- the wallet signature on the binding
-- the leaf hash
-- the Merkle proof up to the claimed root
+The backend enforces:
 
-The client also stores the last checkpoint it has seen and rejects:
+- authenticated session
+- active sender messaging identity
+- valid recipient wallet-signed binding
+- recipient binding freshness
+- block-list checks
+- duplicate `clientMessageId` handling
+- attachment ownership checks
 
-- smaller `treeSize` values
-- same-size checkpoints with a different root hash
+For current sealed envelopes, the relay stores routing metadata plus ciphertext, nonce, sender ephemeral pubkey, message type, and expiry. The plaintext body is inside the encrypted payload.
 
-This means the directory is **client-verifiable**.
+Older non-sealed sends also include a sender envelope signature that the backend verifies before storing the relay message.
 
-It does **not** mean the directory is independently witnessed.
+After local processing, clients acknowledge messages through `/messaging/v3/ack`. Acknowledged pending messages are deleted from the relay.
 
-### 3. Message sending
+Clients can report delivery problems through `/messaging/v3/decrypt-failed` and `/messaging/v3/rekey-required`. Senders can check status through `/messaging/v3/outgoing-statuses`.
 
-For current v2 sends:
+## Push
 
-1. The sender builds a sealed inner payload containing:
-   - plaintext body
-   - sender wallet-signed identity binding
-   - sender wallet signature over the message envelope
-2. The sender encrypts that sealed payload to the recipient's static messaging public key using:
-   - a fresh ephemeral sender Curve25519 key
-   - HKDF-SHA256
-   - ChaCha20-Poly1305
-3. The relay receives the outer routing payload and ciphertext.
+Device registrations use `/messaging/v3/device-registrations`.
 
-On receipt, the iOS client:
+The wallet signs the registration over wallet pubkey, active messaging pubkey, platform, environment, device token, and timestamp.
 
-1. decrypts the sealed payload
-2. verifies the sender's binding
-3. verifies the sender's wallet signature over the message envelope
-4. only then accepts and stores the message locally
-
-### 4. Attachments
-
-Attachment bytes are encrypted client-side before upload.
-
-The relay stores ciphertext and blob metadata, not plaintext attachment content.
-
-Attachment decryption metadata rides inside the encrypted message body.
-
-### 5. Local storage and backup
-
-On iOS:
-
-- the messaging private key is stored in the keychain
-- the local message store is encrypted at rest
-- cached attachment files are encrypted at rest
-
-There is no server-side backup of the messaging private key.
-
-Important nuance:
-
-- the messaging private key stays local to the device
-- if that local key is lost, the client rotates to a new messaging key and future delivery heals through re-registration and resend
-- already-imported local message history can still remain readable from the app's encrypted local store
-
-## What the Client Verifies
-
-The iOS client does not simply trust relay assertions.
-
-It verifies:
-
-- wallet signatures on identity bindings
-- recipient directory inclusion proofs
-- sender envelope signatures
-- sealed sender payload authenticity after decryption
-
-This is the strongest part of the current system.
-
-The relay can route, store, delay, or drop ciphertext, but it cannot silently substitute sender or recipient identity without breaking verification.
-
-## What Split Still Learns
-
-The Split backend still sees significant metadata.
-
-Today the relay can learn:
-
-- which authenticated Split user is sending
-- which authenticated Split user is receiving
-- each user's wallet pubkey
-- each user's Lightning address
-- when a user resolves a recipient by Lightning address
-- the sender/recipient graph
-- message timing
-- message type
-- ciphertext length
-- attachment existence
-- attachment size
-- push token registration
-- when relay messages are acknowledged
-- when attachments are downloaded or marked received
-
-This is **not** a metadata-hiding system.
-
-## What Apple / Google Still Learn
-
-If push notifications are enabled, Apple and/or Google will also learn that:
-
-- the Split app received a push notification
-- at a particular time
-- for a particular device token
-
-Current APNs messaging pushes use a generic visible notification:
+APNs new-message pushes show a generic notification:
 
 - title: `Split`
 - body: `New message`
 
-They do not contain message plaintext, but push delivery itself is still metadata.
+FCM pushes use data payloads. Push payloads do not include message plaintext, but Apple and Google still see push delivery metadata.
 
-## Relay Retention and Cleanup
+## Attachments
 
-Split messaging is currently a store-and-forward relay, not a stateless transport.
+Attachments are encrypted by the client before upload.
 
-### Messages
+The backend stores encrypted bytes and metadata: sender, recipient, object key, size, content type, status, and expiry.
+
+Attachment decryption material is carried inside the encrypted message payload. Attachments are deleted when marked received or when they expire.
+
+## What Split Can See
+
+Split still sees relay metadata:
+
+- authenticated sender and recipient accounts
+- wallet pubkeys and Lightning addresses
+- recipient lookups
+- sender/recipient graph
+- message timing and type
+- ciphertext length
+- attachment existence and size
+- push token registration
+- message acknowledgements
+- attachment downloads and receipt markers
+
+This is not a metadata-private messaging system.
+
+## What Split Should Not See
+
+For correctly implemented current clients, Split should not see:
+
+- message plaintext
+- plaintext attachment bytes
+- local messaging private keys
+- attachment decryption material
+
+These protections still depend on client correctness and device security.
+
+## Retention
+
+Split messaging is a store-and-forward relay.
 
 Current backend behavior:
 
-- pending relay messages are retained until acknowledged or expired
-- when a message expires, the backend marks it `undelivered`
-- on expiry, the backend removes:
-  - ciphertext
-  - nonce
-  - sender ephemeral pubkey
-- old relay receipts are later pruned
+- pending messages remain until acknowledged or expired
+- acknowledged pending messages are deleted
+- expired pending messages are marked `undelivered`
+- expired, rekeyed, and failed messages have ciphertext, nonce, and sender ephemeral key removed
+- delivered receipts are pruned after a shorter retention window
+- non-delivered receipts are pruned after the normal receipt retention window
+- uploaded or linked attachments expire on schedule
+- received, deleted, and expired attachment records are later pruned
 
-### Attachments
+## Trust Boundaries
 
-Current backend behavior:
+Strong properties:
 
-- uploaded and linked attachment blobs expire on schedule
-- the cleanup worker now deletes expired attachment blobs in the background
-- terminal attachment records (`received`, `deleted`, `expired`) are later pruned on schedule
-- attachments are also deleted when the recipient marks them received
+- The wallet authorizes the identity binding.
+- The client verifies recipient directory proofs.
+- The relay should not receive message plaintext or plaintext attachment bytes.
+- The backend does not back up local messaging private keys.
 
-This is stronger than the earlier opportunistic-only cleanup model.
+Remaining trust:
 
-## Strengths
+- Split controls relay availability.
+- Split controls directory freshness.
+- Split can delay, drop, censor, or replay relay ciphertext it already has.
+- Split can observe messaging metadata.
+- There is no independent witness for split-view directory behavior.
+- A compromised unlocked device can expose local state.
 
-- Message bodies are end-to-end encrypted.
-- Attachment bytes are end-to-end encrypted.
-- Sender identity is wallet-authenticated.
-- Recipient identity is client-verified rather than blindly trusted from the relay.
-- The wallet, not the server, authorizes the identity binding between wallet pubkey, Lightning address, and messaging key.
-- The server does not hold the user's messaging private key in plaintext.
-- Local message and attachment caches are encrypted at rest on iOS.
+## Not Claimed
 
-## Weaknesses and Residual Trust
-
-These are real limitations that will be improved upon in future releases.
-
-### No metadata privacy from the relay
-
-Split still sees the social graph and timing metadata.
-
-### No independent directory witnesses
-
-The Merkle directory is client-verifiable, but Split still serves the checkpoint.
-
-There is currently no witness, gossip, or external transparency mechanism to independently audit directory freshness or split-view behavior.
-
-### No deniability
-
-The protocol deliberately binds messages to wallet signatures.
-
-That gives strong authenticity.
-
-It does not give deniable authentication.
-
-### No forward-secret ratchet
-
-Each message uses a fresh sender ephemeral key, which is good.
-
-But the recipient side is still a long-lived static messaging key.
-
-If an attacker later obtains the recipient's messaging private key **and** old ciphertext, those old messages can be decrypted.
-
-This is not a Signal-style double ratchet.
-
-### The relay can still censor, delay, drop, or replay
-
-The relay cannot silently forge sender-authenticated content, but it can still:
-
-- refuse delivery
-- delay delivery
-- drop messages
-- replay ciphertext it already has
-
-So the current system improves confidentiality and authenticity more than it improves availability or censorship resistance.
-
-### Profile data is not a cryptographic trust root
-
-Fields like:
-
-- `profilePicUrl`
-- suggested contact names
-
-are presentation metadata, not the signed identity root.
-
-The trust root is the wallet-signed binding.
-
-### Local encryption still depends on device security
-
-Local encryption helps at-rest protection.
-
-It does not make a fully compromised unlocked device safe.
-
-## Optional Signed Contact Cards
-
-The iOS app also supports a signed `split-contact:` payload format for out-of-band contact sharing.
-
-That is useful as a signed contact-card format.
-
-It is **not** currently the primary routing trust path for message delivery. The normal messaging flow still resolves recipients through the server directory and then verifies the returned binding locally.
-
-## What We Are Not Claiming
-
-This messaging system should **not** be described as:
-
-- anonymous
-- metadata-private
-- witness-backed
-- transparency-audited
-- deniable
-- forward-secret in the Signal sense
-- censorship-resistant
-
-That would overstate the design.
+Do not describe Split messaging as anonymous, metadata-private, witness-backed, transparency-audited, deniable, Signal-compatible, double-ratchet forward-secret, or censorship-resistant.
 
 ## Bottom Line
 
-For technical users, the honest summary is:
+Split messaging is stronger than server-trusted chat because message content is encrypted client-side and identity is wallet-bound.
 
-Split messaging is meaningfully better than a plain server-trusted chat system. The relay does not get message plaintext, cannot silently replace recipient identity without failing client verification, and cannot silently forge sender-authenticated messages without failing client verification.
-
-But Split still operates a visible relay and visible directory. The backend still learns the social graph, still controls availability and directory freshness, and the protocol deliberately prioritizes strong wallet-bound authenticity over deniability and metadata minimization.
-
-If you want a one-line description, use this:
-
-> Split messaging is authenticated end-to-end encryption with a client-verified server directory and explicit residual metadata trust in the relay.
+It is still a visible relay. Split learns metadata, controls availability, and currently operates the directory without external witnesses.
