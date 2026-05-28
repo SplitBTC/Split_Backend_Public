@@ -179,7 +179,7 @@ test('POST /create_merchant_coupon validates, uploads, and creates a pending cou
         createdCoupons[0].primaryBusinessAddress.formattedAddress,
         '123 Main St, Washington, DC 20001, USA'
       );
-      assert.match(createdCoupons[0].businessLogoUrl, /^https:\/\/cdn\.split-loyalty\.com\/merchant-coupons\/logos\/.+\.png$/);
+      assert.match(createdCoupons[0].businessLogoUrl, /^https:\/\/cdn\.example\.com\/merchant-coupons\/logos\/.+\.png$/);
       assert.match(createdCoupons[0].businessLogoObjectKey, /^merchant-coupons\/logos\/.+\.png$/);
     });
   });

@@ -243,8 +243,8 @@ test('POST /lightning-address saves a normalized address for a user who does not
       assert.equal(response.status, 200);
       assert.equal(body.ok, true);
       assert.equal(body.didUpdate, true);
-      assert.equal(body.lightningAddress, 'donate@split-loyalty.com');
-      assert.equal(user.lightningAddress, 'donate@split-loyalty.com');
+      assert.equal(body.lightningAddress, 'donate@example.com');
+      assert.equal(user.lightningAddress, 'donate@example.com');
       assert.equal(user.saveCalls, 1);
     });
   });
@@ -252,7 +252,7 @@ test('POST /lightning-address saves a normalized address for a user who does not
 
 test('POST /lightning-address is a no-op when the user already has one', async (t) => {
   const user = buildUser({
-    lightningAddress: 'donate@split-loyalty.com',
+    lightningAddress: 'donate@example.com',
   });
 
   await withPatchedMethods([
@@ -266,7 +266,7 @@ test('POST /lightning-address is a no-op when the user already has one', async (
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          lightningAddress: 'other@split-loyalty.com',
+          lightningAddress: 'other@example.com',
         }),
       });
 
@@ -274,7 +274,7 @@ test('POST /lightning-address is a no-op when the user already has one', async (
 
       assert.equal(response.status, 200);
       assert.equal(body.didUpdate, false);
-      assert.equal(body.lightningAddress, 'donate@split-loyalty.com');
+      assert.equal(body.lightningAddress, 'donate@example.com');
       assert.equal(user.saveCalls, 0);
     });
   });
@@ -489,9 +489,114 @@ test('POST /RewardsCheck validates destinationPubkey', async (t) => {
   });
 });
 
+test('GET /v1/reward-merchant-pubkey-hashes returns hashes and backfills missing values without auth', async (t) => {
+  const merchantRecords = [
+    {
+      _id: 'merchant-hash-1',
+      pubkey: ' 03MERCHANTPUBKEY ',
+    },
+    {
+      _id: 'merchant-hash-2',
+      pubkey: '02existingmerchant',
+      pubkeyHash: MerchantPubKey.hashPubkey('02existingmerchant'),
+      pubkeyHashVersion: MerchantPubKey.PUBKEY_HASH_VERSION,
+    },
+  ];
+  const updateCalls = [];
+
+  await withPatchedMethods([
+    {
+      target: MerchantPubKey,
+      key: 'find',
+      value: () => ({
+        select: () => ({
+          lean: async () => merchantRecords,
+        }),
+      }),
+    },
+    {
+      target: MerchantPubKey,
+      key: 'updateOne',
+      value: async (filter, update) => {
+        updateCalls.push({ filter, update });
+        return { modifiedCount: 1 };
+      },
+    },
+  ], async () => {
+    await maybeWithServer(t, async ({ baseUrl }) => {
+      const response = await fetch(`${baseUrl}/v1/reward-merchant-pubkey-hashes`);
+      const body = await response.json();
+
+      const expectedBackfilledHash = MerchantPubKey.hashPubkey('03merchantpubkey');
+      const expectedExistingHash = MerchantPubKey.hashPubkey('02existingmerchant');
+
+      assert.equal(response.status, 200);
+      assert.equal(body.ok, true);
+      assert.equal(body.algorithm, 'sha256');
+      assert.equal(body.normalization, 'trim-lowercase');
+      assert.equal(body.hashVersion, MerchantPubKey.PUBKEY_HASH_VERSION);
+      assert.equal(body.hashPrefix, MerchantPubKey.PUBKEY_HASH_PREFIX);
+      assert.equal(body.cacheTtlSeconds, 3600);
+      assert.equal(body.count, 2);
+      assert.deepEqual(body.hashes, [expectedExistingHash, expectedBackfilledHash].sort());
+      assert.equal(response.headers.get('cache-control'), 'public, max-age=3600');
+      assert.ok(response.headers.get('etag'));
+      assert.equal(updateCalls.length, 1);
+      assert.deepEqual(updateCalls[0].filter, { _id: 'merchant-hash-1' });
+      assert.equal(updateCalls[0].update.$set.pubkeyHash, expectedBackfilledHash);
+      assert.equal(updateCalls[0].update.$set.pubkeyHashVersion, MerchantPubKey.PUBKEY_HASH_VERSION);
+      assert.ok(updateCalls[0].update.$set.pubkeyHashUpdatedAt instanceof Date);
+    });
+  });
+});
+
+test('GET /v1/reward-merchant-pubkey-hashes supports ETag revalidation', async (t) => {
+  const merchantRecords = [
+    {
+      _id: 'merchant-hash-etag-1',
+      pubkey: '03merchantpubkey',
+      pubkeyHash: MerchantPubKey.hashPubkey('03merchantpubkey'),
+      pubkeyHashVersion: MerchantPubKey.PUBKEY_HASH_VERSION,
+    },
+  ];
+
+  await withPatchedMethods([
+    {
+      target: MerchantPubKey,
+      key: 'find',
+      value: () => ({
+        select: () => ({
+          lean: async () => merchantRecords,
+        }),
+      }),
+    },
+    {
+      target: MerchantPubKey,
+      key: 'updateOne',
+      value: async () => {
+        throw new Error('No backfill should be needed');
+      },
+    },
+  ], async () => {
+    await maybeWithServer(t, async ({ baseUrl }) => {
+      const firstResponse = await fetch(`${baseUrl}/v1/reward-merchant-pubkey-hashes`);
+      const etag = firstResponse.headers.get('etag');
+      const secondResponse = await fetch(`${baseUrl}/v1/reward-merchant-pubkey-hashes`, {
+        headers: {
+          'If-None-Match': etag,
+        },
+      });
+
+      assert.equal(firstResponse.status, 200);
+      assert.ok(etag);
+      assert.equal(secondResponse.status, 304);
+    });
+  });
+});
+
 test('POST /messaging/v3/identity rejects an invalid wallet signature', async (t) => {
   const user = buildUser({
-    lightningAddress: 'alice@split-loyalty.com',
+    lightningAddress: 'alice@example.com',
   });
 
   await withPatchedMethods([
@@ -525,7 +630,7 @@ test('POST /messaging/v3/identity rejects an invalid wallet signature', async (t
 
 test('POST /messaging/v3/identity stores the current messaging identity when the signature is valid', async (t) => {
   const user = buildUser({
-    lightningAddress: 'alice@split-loyalty.com',
+    lightningAddress: 'alice@example.com',
   });
 
   await withPatchedMethods([
@@ -571,7 +676,7 @@ test('POST /messaging/v3/identity moves old-key pending messages into rekey-requ
   const oldMessagingPubkey = '02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
   const newMessagingPubkey = '02cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc';
   const user = buildUser({
-    lightningAddress: 'alice@split-loyalty.com',
+    lightningAddress: 'alice@example.com',
     messagingPubkeyV2: oldMessagingPubkey,
     messagingIdentityV2Signature: 'old-signature',
     messagingIdentityV2SignatureVersion: 2,
@@ -662,7 +767,7 @@ test('POST /messaging/v3/identity moves old-key pending messages into rekey-requ
 test('POST /messaging/v3/directory/lookup returns the signed recipient bundle when both sides are active', async (t) => {
   const sender = buildUser({
     _id: 'sender-1',
-    lightningAddress: 'alice@split-loyalty.com',
+    lightningAddress: 'alice@example.com',
     messagingPubkeyV2: '02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
     messagingIdentityV2Signature: 'sender-signature',
     messagingIdentityV2SignatureVersion: 2,
@@ -671,12 +776,12 @@ test('POST /messaging/v3/directory/lookup returns the signed recipient bundle wh
   const recipient = buildUser({
     _id: 'recipient-1',
     walletPubkey: '02cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
-    lightningAddress: 'bob@split-loyalty.com',
+    lightningAddress: 'bob@example.com',
     messagingPubkeyV2: '02dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
     messagingIdentityV2Signature: 'recipient-signature',
     messagingIdentityV2SignatureVersion: 2,
     messagingIdentityV2SignedAt: new Date('2026-01-02T00:00:00.000Z'),
-    profilePicUrl: 'https://cdn.split-loyalty.com/bob.png',
+    profilePicUrl: 'https://cdn.example.com/bob.png',
   });
 
   await withPatchedMethods([
@@ -722,13 +827,13 @@ test('POST /messaging/v3/directory/lookup returns the signed recipient bundle wh
 test('POST /messaging/blocks creates a block by lightningAddress and clears pending relay messages', async (t) => {
   const blocker = buildUser({
     _id: 'blocker-1',
-    lightningAddress: 'alice@split-loyalty.com',
+    lightningAddress: 'alice@example.com',
   });
   const target = buildUser({
     _id: 'blocked-1',
     walletPubkey: '02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
-    lightningAddress: 'bob@split-loyalty.com',
-    profilePicUrl: 'https://cdn.split-loyalty.com/bob.png',
+    lightningAddress: 'bob@example.com',
+    profilePicUrl: 'https://cdn.example.com/bob.png',
   });
   const deletedMessageFilters = [];
 
@@ -820,8 +925,8 @@ test('GET /messaging/blocks returns the authenticated users block list', async (
       blockerUserId: blocker._id,
       blockedUserId: 'blocked-1',
       blockedWalletPubkey: '02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
-      blockedLightningAddress: 'bob@split-loyalty.com',
-      blockedProfilePicUrl: 'https://cdn.split-loyalty.com/bob.png',
+      blockedLightningAddress: 'bob@example.com',
+      blockedProfilePicUrl: 'https://cdn.example.com/bob.png',
       createdAt: new Date('2026-04-08T12:00:00.000Z'),
       updatedAt: new Date('2026-04-08T12:00:00.000Z'),
     },
@@ -891,7 +996,7 @@ test('DELETE /messaging/blocks/:blockedWalletPubkey removes a block idempotently
 test('POST /messaging/v3/directory/lookup returns a generic unavailable error when the recipient blocked the sender', async (t) => {
   const sender = buildUser({
     _id: 'sender-1',
-    lightningAddress: 'alice@split-loyalty.com',
+    lightningAddress: 'alice@example.com',
     messagingPubkeyV2: '02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
     messagingIdentityV2Signature: 'sender-v2-signature',
     messagingIdentityV2SignatureVersion: 2,
@@ -900,7 +1005,7 @@ test('POST /messaging/v3/directory/lookup returns a generic unavailable error wh
   const recipient = buildUser({
     _id: 'recipient-1',
     walletPubkey: '02cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
-    lightningAddress: 'bob@split-loyalty.com',
+    lightningAddress: 'bob@example.com',
     messagingPubkeyV2: '02dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
     messagingIdentityV2Signature: 'recipient-v2-signature',
     messagingIdentityV2SignatureVersion: 2,
@@ -954,7 +1059,7 @@ test('POST /messaging/v3/directory/lookup returns a generic unavailable error wh
 test('POST /messaging/v3/send rejects sends to a user the sender has blocked', async (t) => {
   const sender = buildUser({
     _id: 'sender-1',
-    lightningAddress: 'alice@split-loyalty.com',
+    lightningAddress: 'alice@example.com',
     messagingPubkeyV2: '02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
     messagingIdentityV2Signature: 'sender-v2-signature',
     messagingIdentityV2SignatureVersion: 2,
@@ -963,7 +1068,7 @@ test('POST /messaging/v3/send rejects sends to a user the sender has blocked', a
   const recipient = buildUser({
     _id: 'recipient-1',
     walletPubkey: '02cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
-    lightningAddress: 'bob@split-loyalty.com',
+    lightningAddress: 'bob@example.com',
     messagingPubkeyV2: '02dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
     messagingIdentityV2Signature: 'recipient-v2-signature',
     messagingIdentityV2SignatureVersion: 2,
@@ -1031,7 +1136,7 @@ test('POST /messaging/v3/send rejects sends to a user the sender has blocked', a
 
 test('POST /messaging/v3/device-registrations stores a registration for the active messaging pubkey', async (t) => {
   const user = buildUser({
-    lightningAddress: 'alice@split-loyalty.com',
+    lightningAddress: 'alice@example.com',
     messagingPubkeyV2: '02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
     messagingIdentityV2Signature: 'sender-v2-signature',
     messagingIdentityV2SignatureVersion: 2,
@@ -1048,7 +1153,7 @@ test('POST /messaging/v3/device-registrations stores a registration for the acti
     environment: 'dev',
     registrationSignedAt: new Date('2026-04-10T12:00:00.000Z'),
     appVersion: '3.7.0',
-    bundleId: 'com.splitloyalty.app.Split-Rewards',
+    bundleId: 'com.example.app',
     lastSeenAt: new Date('2026-04-10T12:00:00.000Z'),
     createdAt: new Date('2026-04-10T12:00:00.000Z'),
     updatedAt: new Date('2026-04-10T12:00:00.000Z'),
@@ -1089,7 +1194,7 @@ test('POST /messaging/v3/device-registrations stores a registration for the acti
           registrationSignatureVersion: 1,
           registrationSignedAt: 1_712_750_400,
           appVersion: '3.7.0',
-          bundleId: 'com.splitloyalty.app.Split-Rewards',
+          bundleId: 'com.example.app',
         }),
       });
 
@@ -1110,7 +1215,7 @@ test('POST /messaging/v3/device-registrations stores a registration for the acti
 
 test('POST /messaging/v3/ack deletes successfully delivered relay messages', async (t) => {
   const user = buildUser({
-    lightningAddress: 'alice@split-loyalty.com',
+    lightningAddress: 'alice@example.com',
     messagingPubkey: '02aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab',
     messagingPubkeyV2: '02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
   });
@@ -1159,7 +1264,7 @@ test('POST /messaging/v3/ack deletes successfully delivered relay messages', asy
 
 test('POST /messaging/v3/rekey-required marks messages and reopens linked attachments for resend', async (t) => {
   const user = buildUser({
-    lightningAddress: 'alice@split-loyalty.com',
+    lightningAddress: 'alice@example.com',
     messagingPubkeyV2: '02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
   });
   const messageIds = [
@@ -1222,7 +1327,7 @@ test('POST /messaging/v3/rekey-required marks messages and reopens linked attach
 
 test('POST /messaging/v3/decrypt-failed requests one silent retry, then marks the next attempt terminal', async (t) => {
   const user = buildUser({
-    lightningAddress: 'alice@split-loyalty.com',
+    lightningAddress: 'alice@example.com',
     messagingPubkeyV2: '02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
   });
   const directMessageUpdateCalls = [];
@@ -1309,7 +1414,7 @@ test('GET /messaging/v3/outgoing-statuses prioritizes actionable statuses ahead 
     {
       _id: 'msg-undelivered-1',
       clientMessageId: 'client-undelivered-1',
-      recipientLightningAddress: 'alice@split-loyalty.com',
+      recipientLightningAddress: 'alice@example.com',
       recipientWalletPubkey: 'wallet-undelivered-1',
       status: 'undelivered',
       sameKeyRetryCount: 0,
@@ -1320,7 +1425,7 @@ test('GET /messaging/v3/outgoing-statuses prioritizes actionable statuses ahead 
     {
       _id: 'msg-rekey-1',
       clientMessageId: 'client-rekey-1',
-      recipientLightningAddress: 'bob@split-loyalty.com',
+      recipientLightningAddress: 'bob@example.com',
       recipientWalletPubkey: 'wallet-rekey-1',
       status: 'rekey_required',
       sameKeyRetryCount: 0,

@@ -73,7 +73,7 @@ function verifyWalletSignature({ pubkey, nonce, signature }) {
 
 router.post('/auth/nonce', async (_req, res) => {
   try {
-    const domain = process.env.MERCHANT_WALLET_AUTH_DOMAIN || 'merchant.splitrewards.app';
+    const domain = process.env.MERCHANT_WALLET_AUTH_DOMAIN || 'merchant.example.invalid';
     const { nonce, expiresAt, messageToSign } = merchantSessionHelper.issueNonce({ domain });
 
     return res.status(200).json({ nonce, expiresAt, messageToSign });

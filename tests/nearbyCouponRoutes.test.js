@@ -111,7 +111,7 @@ test('GET /v1/merchant-coupons/nearby returns approved coupons nearest to coordi
           {
             _id: 'coupon-1',
             businessName: 'Split Cafe',
-            businessLogoUrl: 'https://cdn.split-loyalty.com/merchant-coupons/logos/cafe.png',
+            businessLogoUrl: 'https://cdn.example.com/merchant-coupons/logos/cafe.png',
             dealDescription: 'Large latte and pastry for $8 every weekday.',
             appliesToAllLocations: true,
             primaryBusinessAddress: {
@@ -214,7 +214,7 @@ test('GET /v1/merchant-coupons/nearby includes current-user redemption status wh
         {
           _id: '680c3ef500000000000000aa',
           businessName: 'Split Cafe',
-          businessLogoUrl: 'https://cdn.split-loyalty.com/merchant-coupons/logos/cafe.png',
+          businessLogoUrl: 'https://cdn.example.com/merchant-coupons/logos/cafe.png',
           dealDescription: 'Large latte and pastry for $8 every weekday.',
           appliesToAllLocations: true,
           primaryBusinessAddress: {

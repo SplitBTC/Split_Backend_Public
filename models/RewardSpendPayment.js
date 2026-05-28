@@ -14,9 +14,25 @@ const RewardSpendPaymentSchema = new mongoose.Schema(
       trim: true,
     },
 
+    paymentHashHash: {
+      type: String,
+      trim: true,
+    },
+
+    invoiceHash: {
+      type: String,
+      trim: true,
+      index: true,
+    },
+
     destinationPubkey: {
       type: String,
-      required: true,
+      trim: true,
+      index: true,
+    },
+
+    merchantPubkeyHash: {
+      type: String,
       trim: true,
       index: true,
     },
@@ -66,6 +82,11 @@ const RewardSpendPaymentSchema = new mongoose.Schema(
       default: Date.now,
       index: true,
     },
+
+    verificationMethod: {
+      type: String,
+      trim: true,
+    },
   },
   {
     timestamps: true,
@@ -81,7 +102,17 @@ RewardSpendPaymentSchema.index(
     },
   }
 );
+RewardSpendPaymentSchema.index(
+  { paymentHashHash: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      paymentHashHash: { $type: "string" },
+    },
+  }
+);
 RewardSpendPaymentSchema.index({ userId: 1, monthKey: 1 });
 RewardSpendPaymentSchema.index({ destinationPubkey: 1, monthKey: 1 });
+RewardSpendPaymentSchema.index({ merchantPubkeyHash: 1, monthKey: 1 });
 
 module.exports = mongoose.model("RewardSpendPayment", RewardSpendPaymentSchema);

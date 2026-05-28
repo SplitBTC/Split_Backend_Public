@@ -19,6 +19,9 @@ const RewardSpendPayment = require('../models/RewardSpendPayment');
 const RewardPayoutAllocation = require('../models/RewardPayoutAllocation');
 const userAuthMiddleware = require('../middlewares/userAuthMiddleware');
 const userRewardSpendFunction = require('../rewards/userRewardSpendFunction');
+const rewardClaimEncryption = require('../rewards/rewardClaimEncryption');
+const { decodeBolt11 } = require('../rewards/bolt11Invoice');
+const { normalizeProof32ByteHex } = require('../rewards/rewardProofEncoding');
 const sessionHelper = require('../auth/sessionHelper');
 const googleMapsAddressValidation = require('../services/googleMapsAddressValidation');
 const breezApiKey = process.env.BREEZ_API_KEY;
@@ -60,6 +63,27 @@ function merchantPubkeyQuery(pubkey) {
       $options: 'i',
     },
   };
+}
+
+function normalizeHash(value) {
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
+function sha256Hex(value) {
+  return crypto.createHash('sha256').update(value).digest('hex');
+}
+
+function rewardTraceFingerprint(value) {
+  if (typeof value !== 'string' || value.trim().length === 0) return 'none';
+  return sha256Hex(Buffer.from(value.trim(), 'utf8')).slice(0, 12);
+}
+
+function rewardClaimTrace(event, details = {}) {
+  console.info(
+    '[RewardClaimTrace]',
+    event,
+    JSON.stringify(details)
+  );
 }
 
 const rewardsMinimumVersions = Object.freeze({
@@ -260,6 +284,72 @@ router.get('/rewards-version-check', async (req, res) => {
   }
 });
 
+router.get('/v1/reward-merchant-pubkey-hashes', async (req, res) => {
+  try {
+    const hashVersion = MerchantPubKey.PUBKEY_HASH_VERSION;
+    const records = await MerchantPubKey.find({})
+      .select('_id pubkey pubkeyHash pubkeyHashVersion')
+      .lean();
+
+    const hashSet = new Set();
+    const backfills = [];
+    const now = new Date();
+
+    for (const record of records) {
+      const computedHash = MerchantPubKey.hashPubkey(record.pubkey);
+      if (!computedHash) continue;
+
+      hashSet.add(computedHash);
+
+      if (record.pubkeyHash !== computedHash || record.pubkeyHashVersion !== hashVersion) {
+        backfills.push(
+          MerchantPubKey.updateOne(
+            { _id: record._id },
+            {
+              $set: {
+                pubkeyHash: computedHash,
+                pubkeyHashVersion: hashVersion,
+                pubkeyHashUpdatedAt: now,
+              },
+            }
+          )
+        );
+      }
+    }
+
+    if (backfills.length > 0) {
+      await Promise.all(backfills);
+    }
+
+    const hashes = Array.from(hashSet).sort();
+    const etag = `"${crypto
+      .createHash('sha256')
+      .update(`${hashVersion}:${hashes.join(',')}`, 'utf8')
+      .digest('hex')}"`;
+
+    res.set('Cache-Control', 'public, max-age=3600');
+    res.set('ETag', etag);
+
+    if (req.headers['if-none-match'] === etag) {
+      return res.status(304).end();
+    }
+
+    return res.status(200).json({
+      ok: true,
+      algorithm: 'sha256',
+      normalization: 'trim-lowercase',
+      hashVersion,
+      hashPrefix: MerchantPubKey.PUBKEY_HASH_PREFIX,
+      cacheTtlSeconds: 3600,
+      count: hashes.length,
+      hashes,
+    });
+  } catch (error) {
+    console.error('Merchant pubkey hash list error:', error);
+    return res.status(500).json({ ok: false, error: 'Server error' });
+  }
+});
+
 router.get('/v1/merchant-coupons/nearby', async (req, res) => {
   try {
     const currentUserId = getOptionalAuthenticatedUserId(req);
@@ -448,7 +538,7 @@ router.get('/breez-api-key', async (req, res) => {
 router.post('/auth/nonce', async (req, res) => {
   try {
     // domain separation helps prevent signatures being reused elsewhere
-    const domain = process.env.WALLET_AUTH_DOMAIN || 'splitrewards.app';
+    const domain = process.env.WALLET_AUTH_DOMAIN || 'example.invalid';
 
     const { nonce, expiresAt, messageToSign } = sessionHelper.issueNonce({ domain });
 
@@ -671,7 +761,7 @@ router.post('/Upload_Profile_Pic', userAuthMiddleware, upload.single('profilePic
       ACL: 'public-read',
     }));
 
-    const publicUrl = `https://cdn.split-loyalty.com/${fileName}`;
+    const publicUrl = `https://cdn.example.com/${fileName}`;
     user.profilePicUrl = publicUrl;
     await user.save();
 
@@ -875,6 +965,267 @@ router.post('/LogRewardSpend', userAuthMiddleware, async (req, res) => {
   } catch (error) {
     console.error('Error logging reward spend:', error);
     return res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+router.get('/v1/reward-claim-encryption-key', async (req, res) => {
+  try {
+    res.set('Cache-Control', 'public, max-age=3600');
+    return res.status(200).json(rewardClaimEncryption.publicKeyResponse());
+  } catch (error) {
+    console.error('Reward claim encryption key error:', error);
+    return res.status(500).json({ ok: false, error: 'Server error' });
+  }
+});
+
+router.post('/v2/reward-spend-claims', userAuthMiddleware, async (req, res) => {
+  try {
+    const userId = req.userId;
+    const claimId = typeof req.body?.clientClaimId === 'string'
+      ? req.body.clientClaimId.trim().slice(0, 36)
+      : 'none';
+    rewardClaimTrace('start', {
+      claimId,
+      userFp: rewardTraceFingerprint(String(userId || '')),
+      keyId: typeof req.body?.keyId === 'string' ? req.body.keyId.trim() : 'none',
+      algorithm: typeof req.body?.algorithm === 'string' ? req.body.algorithm.trim() : 'none',
+    });
+
+    const user = await User.findById(userId).select('_id');
+    if (!user) {
+      rewardClaimTrace('reject unauthorized-user', { claimId });
+      return res.status(401).json({ ok: false, error: 'Unauthorized' });
+    }
+
+    let payload;
+    try {
+      payload = rewardClaimEncryption.decryptClaimEnvelope(req.body || {});
+    } catch (error) {
+      rewardClaimTrace('reject decrypt-failed', {
+        claimId,
+        errorName: error?.name || 'Error',
+      });
+      return res.status(400).json({ ok: false, error: 'Invalid encrypted reward claim' });
+    }
+
+    const merchantPubkeyHash = normalizeHash(payload.merchantPubkeyHash);
+    const paymentHashProof = normalizeProof32ByteHex(payload.paymentHash);
+    const preimageProof = normalizeProof32ByteHex(payload.preimage);
+    const paymentHash = paymentHashProof?.hex || '';
+    const preimage = preimageProof?.hex || '';
+    const invoice = String(payload.invoice || '').trim();
+    const btcAmountSatsNum = Number(payload.btcAmountSats);
+    const usdAmountCentsNum = Number(payload.usdAmountCents);
+    const occurredAt = payload.occurredAt ? new Date(payload.occurredAt) : new Date();
+    const errors = [];
+
+    rewardClaimTrace('decrypted', {
+      claimId,
+      merchantHashFp: rewardTraceFingerprint(merchantPubkeyHash),
+      paymentHashFp: rewardTraceFingerprint(paymentHash),
+      paymentHashEncoding: paymentHashProof?.encoding || 'invalid',
+      preimagePresent: preimage.length > 0,
+      preimageEncoding: preimageProof?.encoding || 'invalid',
+      invoicePresent: invoice.length > 0,
+      invoiceLen: invoice.length,
+      btcAmountSats: Number.isFinite(btcAmountSatsNum) ? btcAmountSatsNum : null,
+      usdAmountCents: Number.isFinite(usdAmountCentsNum) ? usdAmountCentsNum : null,
+      occurredAt: Number.isNaN(occurredAt.getTime()) ? 'invalid' : occurredAt.toISOString(),
+    });
+
+    if (!merchantPubkeyHash) errors.push('merchantPubkeyHash is required');
+    if (!paymentHashProof) errors.push('paymentHash must be a 32-byte hex or base64 value');
+    if (!preimageProof) errors.push('preimage must be a 32-byte hex or base64 value');
+    if (!invoice) errors.push('invoice is required');
+    if (!Number.isInteger(btcAmountSatsNum) || btcAmountSatsNum <= 0) {
+      errors.push('btcAmountSats must be a positive integer');
+    }
+    if (!Number.isFinite(usdAmountCentsNum) || usdAmountCentsNum <= 0) {
+      errors.push('usdAmountCents must be a positive number');
+    }
+    if (Number.isNaN(occurredAt.getTime())) errors.push('occurredAt must be a valid date');
+
+    if (errors.length > 0) {
+      rewardClaimTrace('reject validation', { claimId, errors });
+      return res.status(400).json({ ok: false, error: 'Invalid request', details: errors });
+    }
+
+    const paymentHashFromPreimage = sha256Hex(Buffer.from(preimage, 'hex'));
+    if (paymentHashFromPreimage !== paymentHash) {
+      rewardClaimTrace('reject preimage-mismatch', {
+        claimId,
+        paymentHashFp: rewardTraceFingerprint(paymentHash),
+      });
+      return res.status(400).json({ ok: false, error: 'preimage does not match paymentHash' });
+    }
+    rewardClaimTrace('preimage-verified', {
+      claimId,
+      paymentHashFp: rewardTraceFingerprint(paymentHash),
+    });
+
+    const invoiceMetadata = decodeBolt11(invoice);
+    if (!invoiceMetadata?.paymentHash || !invoiceMetadata?.destinationPubkey) {
+      rewardClaimTrace('reject invoice-unverified', {
+        claimId,
+        invoiceHashFp: rewardTraceFingerprint(invoice),
+        hasInvoicePaymentHash: Boolean(invoiceMetadata?.paymentHash),
+        hasInvoiceDestination: Boolean(invoiceMetadata?.destinationPubkey),
+      });
+      return res.status(400).json({ ok: false, error: 'invoice could not be verified' });
+    }
+
+    if (normalizeHash(invoiceMetadata.paymentHash) !== paymentHash) {
+      rewardClaimTrace('reject invoice-payment-hash-mismatch', {
+        claimId,
+        paymentHashFp: rewardTraceFingerprint(paymentHash),
+        invoicePaymentHashFp: rewardTraceFingerprint(normalizeHash(invoiceMetadata.paymentHash)),
+      });
+      return res.status(400).json({ ok: false, error: 'invoice paymentHash mismatch' });
+    }
+
+    const invoiceMerchantHash = MerchantPubKey.hashPubkey(invoiceMetadata.destinationPubkey);
+    if (invoiceMerchantHash !== merchantPubkeyHash) {
+      rewardClaimTrace('reject merchant-hash-mismatch', {
+        claimId,
+        claimedMerchantHashFp: rewardTraceFingerprint(merchantPubkeyHash),
+        invoiceMerchantHashFp: rewardTraceFingerprint(invoiceMerchantHash),
+      });
+      return res.status(400).json({ ok: false, error: 'invoice destination is not the claimed merchant' });
+    }
+
+    if (
+      Number.isInteger(invoiceMetadata.amountSats) &&
+      invoiceMetadata.amountSats > 0 &&
+      invoiceMetadata.amountSats !== btcAmountSatsNum
+    ) {
+      rewardClaimTrace('reject invoice-amount-mismatch', {
+        claimId,
+        invoiceAmountSats: invoiceMetadata.amountSats,
+        claimedAmountSats: btcAmountSatsNum,
+      });
+      return res.status(400).json({ ok: false, error: 'invoice amount mismatch' });
+    }
+    rewardClaimTrace('invoice-verified', {
+      claimId,
+      merchantHashFp: rewardTraceFingerprint(merchantPubkeyHash),
+      paymentHashFp: rewardTraceFingerprint(paymentHash),
+      invoiceHashFp: rewardTraceFingerprint(invoice),
+      invoiceAmountSats: Number.isInteger(invoiceMetadata.amountSats) ? invoiceMetadata.amountSats : null,
+    });
+
+    const merchantPubkeyMatch = await MerchantPubKey.findOne({
+      pubkeyHash: merchantPubkeyHash,
+      pubkeyHashVersion: MerchantPubKey.PUBKEY_HASH_VERSION,
+    }).select('_id').lean();
+
+    if (!merchantPubkeyMatch) {
+      rewardClaimTrace('reject merchant-not-eligible', {
+        claimId,
+        merchantHashFp: rewardTraceFingerprint(merchantPubkeyHash),
+      });
+      return res.status(400).json({ ok: false, error: 'merchant is not reward eligible' });
+    }
+    rewardClaimTrace('merchant-found', {
+      claimId,
+      merchantHashFp: rewardTraceFingerprint(merchantPubkeyHash),
+      merchantIdFp: rewardTraceFingerprint(String(merchantPubkeyMatch._id || '')),
+    });
+
+    const monthKey = occurredAt.toISOString().slice(0, 7);
+    const paymentHashHash = sha256Hex(Buffer.from(paymentHash, 'utf8'));
+    const invoiceHash = sha256Hex(Buffer.from(invoice, 'utf8'));
+    rewardClaimTrace('create-payment-row', {
+      claimId,
+      monthKey,
+      paymentHashHashFp: paymentHashHash.slice(0, 12),
+      invoiceHashFp: invoiceHash.slice(0, 12),
+      merchantHashFp: rewardTraceFingerprint(merchantPubkeyHash),
+      btcAmountSats: btcAmountSatsNum,
+      usdAmountCents: usdAmountCentsNum,
+    });
+
+    try {
+      await RewardSpendPayment.create({
+        userId,
+        paymentHashHash,
+        invoiceHash,
+        merchantPubkeyHash,
+        btcAmountSats: btcAmountSatsNum,
+        usdAmountCents: usdAmountCentsNum,
+        network: 'lightning',
+        direction: 'sent',
+        status: 'Completed',
+        monthKey,
+        occurredAt,
+        verificationMethod: 'encrypted-bolt11-preimage-v1',
+      });
+    } catch (error) {
+      if (error && error.code === 11000) {
+        rewardClaimTrace('duplicate-payment-hash', {
+          claimId,
+          paymentHashHashFp: paymentHashHash.slice(0, 12),
+          invoiceHashFp: invoiceHash.slice(0, 12),
+          errorCode: error.code,
+        });
+        return res.status(200).json({
+          ok: true,
+          rewardSpendApplied: false,
+          duplicatePaymentHash: true,
+        });
+      }
+
+      throw error;
+    }
+    rewardClaimTrace('payment-row-created', {
+      claimId,
+      paymentHashHashFp: paymentHashHash.slice(0, 12),
+      invoiceHashFp: invoiceHash.slice(0, 12),
+    });
+
+    await User.updateOne(
+      { _id: userId },
+      { $inc: { lifetimeMerchantSpendCents: usdAmountCentsNum } }
+    );
+    rewardClaimTrace('user-updated', {
+      claimId,
+      usdAmountCents: usdAmountCentsNum,
+    });
+
+    await PlatformAnalytics.updateOne(
+      { _id: 'platform' },
+      {
+        $inc: {
+          transactions: 1,
+          'transactionVolume.btcSats': btcAmountSatsNum,
+          'transactionVolume.usdCents': usdAmountCentsNum,
+          merchantTransactions: 1,
+          'merchantVolume.btcSats': btcAmountSatsNum,
+          'merchantVolume.usdCents': usdAmountCentsNum,
+        },
+      },
+      { upsert: true }
+    );
+    rewardClaimTrace('platform-updated', {
+      claimId,
+      btcAmountSats: btcAmountSatsNum,
+      usdAmountCents: usdAmountCentsNum,
+    });
+
+    rewardClaimTrace('success', {
+      claimId,
+      rewardSpendApplied: true,
+      duplicatePaymentHash: false,
+    });
+    return res.status(200).json({
+      ok: true,
+      rewardSpendApplied: true,
+      merchantMatched: true,
+      rewardSpendPaymentRecorded: true,
+      duplicatePaymentHash: false,
+    });
+  } catch (error) {
+    console.error('Encrypted reward claim error:', error);
+    return res.status(500).json({ ok: false, error: 'Server error' });
   }
 });
 

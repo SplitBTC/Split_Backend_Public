@@ -20,9 +20,9 @@ const {
   importLumaEventFromUrl,
 } = require('../services/lumaEventImporter');
 
-const DEFAULT_DONATION_LIGHTNING_ADDRESS = 'donate@split-loyalty.com';
+const DEFAULT_DONATION_LIGHTNING_ADDRESS = 'donate@example.com';
 const DEFAULT_PLAY_STORE_URL =
-  'https://play.google.com/store/apps/details?id=com.splitloyalty.android&pcampaignid=web_share';
+  'https://example.invalid/android';
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const POSTAL_CODE_REGEX = /^\d{5}(?:-\d{4})?$/;
 const COUPON_LOGO_MAX_BYTES = 5 * 1024 * 1024;
@@ -276,7 +276,7 @@ async function uploadCouponLogo(file) {
   }));
 
   return {
-    businessLogoUrl: `https://cdn.split-loyalty.com/${objectKey}`,
+    businessLogoUrl: `https://cdn.example.com/${objectKey}`,
     businessLogoObjectKey: objectKey,
   };
 }

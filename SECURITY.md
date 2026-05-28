@@ -9,7 +9,7 @@ Please do not open a public GitHub issue for security-sensitive reports.
 Email security reports to:
 
 ```text
-taylor@split-loyalty.com
+support@example.com
 ```
 
 We aim to respond as soon as possible. If the report appears security-sensitive, we will keep the discussion private while we investigate and prepare a fix.

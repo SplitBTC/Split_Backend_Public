@@ -23,7 +23,7 @@ domain=${domain}
 nonce=${nonce}`;
 }
 
-function issueNonce({ ttlMs = 5 * 60 * 1000, domain = 'merchant.splitrewards.app' } = {}) {
+function issueNonce({ ttlMs = 5 * 60 * 1000, domain = 'merchant.example.invalid' } = {}) {
   pruneNonces();
 
   const nonce = generateNonce();
