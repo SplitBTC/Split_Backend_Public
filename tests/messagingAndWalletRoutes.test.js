@@ -12,9 +12,15 @@ const jwt = require('jsonwebtoken');
 
 const User = require('../models/User');
 const UserBlock = require('../models/UserBlock');
+const UserBlockV4 = require('../models/UserBlockV4');
 const DirectMessage = require('../models/DirectMessage');
+const DirectMessageV4 = require('../models/DirectMessageV4');
 const MessageAttachment = require('../models/MessageAttachment');
+const MessageAttachmentV4 = require('../models/MessageAttachmentV4');
+const MessagingAccount = require('../models/MessagingAccount');
+const MessagingBinding = require('../models/MessagingBinding');
 const MessagingDeviceRegistration = require('../models/MessagingDeviceRegistration');
+const MessagingDeviceRegistrationV4 = require('../models/MessagingDeviceRegistrationV4');
 const MessagingBindingLog = require('../models/MessagingBindingLog');
 const MessagingDirectoryState = require('../models/MessagingDirectoryState');
 const PlatformWallet = require('../models/PlatformWallet');
@@ -26,6 +32,16 @@ const sessionHelper = require('../auth/sessionHelper');
 const iOSEndPoints = require('../routes/iOSEndPoints');
 const MessageEndPoints = require('../routes/MessageEndPoints');
 const { getRewardsMinimumVersion } = iOSEndPoints;
+const {
+  LIGHTNING_ADDRESS_CLIENT_HASH_SCHEME,
+  USER_HMAC_VERSION,
+  messagingDataHmac,
+  userDataHmac,
+} = require('../services/privacyCrypto');
+const {
+  buildMessagingAccountHmacs,
+  buildMessagingPubkeyHmac,
+} = require('../services/messagingV4Identity');
 
 function createJsonApp() {
   const app = express();
@@ -234,7 +250,7 @@ test('POST /lightning-address saves a normalized address for a user who does not
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          lightningAddress: '  Donate@Split-Loyalty.com ',
+          lightningAddress: '  Donate@Example.Invalid ',
         }),
       });
 
@@ -243,40 +259,289 @@ test('POST /lightning-address saves a normalized address for a user who does not
       assert.equal(response.status, 200);
       assert.equal(body.ok, true);
       assert.equal(body.didUpdate, true);
-      assert.equal(body.lightningAddress, 'donate@example.com');
-      assert.equal(user.lightningAddress, 'donate@example.com');
+      assert.equal(body.lightningAddress, 'donate@example.invalid');
+      assert.equal(user.lightningAddress, 'donate@example.invalid');
       assert.equal(user.saveCalls, 1);
     });
   });
 });
 
+test('POST /lightning-address dual-writes the user-domain Lightning address HMAC', async (t) => {
+  const originalPepper = process.env.USER_DATA_PEPPER;
+  process.env.USER_DATA_PEPPER = 'route-lightning-address-hmac-test-pepper';
+  const user = buildUser();
+
+  try {
+    await withPatchedMethods([
+      { target: User, key: 'findById', value: () => queryResult(user) },
+    ], async () => {
+      await maybeWithServer(t, async ({ baseUrl }) => {
+        const response = await fetch(`${baseUrl}/lightning-address`, {
+          method: 'POST',
+          headers: {
+            Cookie: authCookie(String(user._id)),
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            lightningAddress: ' Donate@Example.Invalid ',
+          }),
+        });
+
+        const body = await response.json();
+
+        assert.equal(response.status, 200);
+        assert.equal(body.didUpdate, true);
+        assert.equal(user.lightningAddressUserHmac, userDataHmac(
+          'donate@example.invalid',
+          { pepper: process.env.USER_DATA_PEPPER }
+        ));
+        assert.equal(user.lightningAddressUserHmacVersion, USER_HMAC_VERSION);
+        assert.equal(user.saveCalls, 1);
+      });
+    });
+  } finally {
+    if (originalPepper) {
+      process.env.USER_DATA_PEPPER = originalPepper;
+    } else {
+      delete process.env.USER_DATA_PEPPER;
+    }
+  }
+});
+
 test('POST /lightning-address is a no-op when the user already has one', async (t) => {
+  const originalPepper = process.env.USER_DATA_PEPPER;
+  delete process.env.USER_DATA_PEPPER;
   const user = buildUser({
-    lightningAddress: 'donate@example.com',
+    lightningAddress: 'donate@example.invalid',
   });
 
-  await withPatchedMethods([
+  try {
+    await withPatchedMethods([
+      { target: User, key: 'findById', value: () => queryResult(user) },
+    ], async () => {
+      await maybeWithServer(t, async ({ baseUrl }) => {
+        const response = await fetch(`${baseUrl}/lightning-address`, {
+          method: 'POST',
+          headers: {
+            Cookie: authCookie(String(user._id)),
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            lightningAddress: 'other@example.invalid',
+          }),
+        });
+
+        const body = await response.json();
+
+        assert.equal(response.status, 200);
+        assert.equal(body.didUpdate, false);
+        assert.equal(body.lightningAddress, 'donate@example.invalid');
+        assert.equal(user.saveCalls, 0);
+      });
+    });
+  } finally {
+    if (originalPepper) {
+      process.env.USER_DATA_PEPPER = originalPepper;
+    }
+  }
+});
+
+test('POST /v1/account/delete deletes the authenticated user and owned account data', async (t) => {
+  const originalMessagingPepper = process.env.MESSAGING_DATA_PEPPER;
+  process.env.MESSAGING_DATA_PEPPER = 'account-delete-v4-test-pepper';
+
+  const user = buildUser({
+    _id: new mongoose.Types.ObjectId(),
+    profilePicUrl: 'https://cdn.example.invalid/profile-pictures/user-1.png',
+    async deleteOne() {
+      this.didDelete = true;
+      return { deletedCount: 1 };
+    },
+  });
+  const messagingAccountId = new mongoose.Types.ObjectId();
+  const attachmentId = new mongoose.Types.ObjectId();
+  const deletedDeviceRegistrationFilters = [];
+  const deletedBlockFilters = [];
+  const messagingAccountFindFilters = [];
+  const v4AttachmentFindFilters = [];
+  const v4AttachmentDeleteFilters = [];
+  const v4DirectMessageDeleteFilters = [];
+  const v4BlockDeleteFilters = [];
+  const v4DeviceRegistrationDeleteFilters = [];
+  const v4BindingDeleteFilters = [];
+  const v4AccountDeleteFilters = [];
+  const r2DeleteCommands = [];
+
+  try {
+    await withPatchedMethods([
     { target: User, key: 'findById', value: () => queryResult(user) },
+    {
+      target: MessagingDeviceRegistration,
+      key: 'deleteMany',
+      value: async (filter) => {
+        deletedDeviceRegistrationFilters.push(filter);
+        return { deletedCount: 2 };
+      },
+    },
+    {
+      target: UserBlock,
+      key: 'deleteMany',
+      value: async (filter) => {
+        deletedBlockFilters.push(filter);
+        return { deletedCount: 3 };
+      },
+    },
+    {
+      target: MessagingAccount,
+      key: 'findOne',
+      value: (filter) => {
+        messagingAccountFindFilters.push(filter);
+        return queryResult({ _id: messagingAccountId });
+      },
+    },
+    {
+      target: MessageAttachmentV4,
+      key: 'find',
+      value: (filter) => {
+        v4AttachmentFindFilters.push(filter);
+        return queryResult([
+          {
+            _id: attachmentId,
+            objectKey: 'messaging/v4/attachments/account-attachment.bin',
+          },
+        ]);
+      },
+    },
+    {
+      target: MessageAttachmentV4,
+      key: 'deleteMany',
+      value: async (filter) => {
+        v4AttachmentDeleteFilters.push(filter);
+        return { deletedCount: 1 };
+      },
+    },
+    {
+      target: DirectMessageV4,
+      key: 'deleteMany',
+      value: async (filter) => {
+        v4DirectMessageDeleteFilters.push(filter);
+        return { deletedCount: 4 };
+      },
+    },
+    {
+      target: UserBlockV4,
+      key: 'deleteMany',
+      value: async (filter) => {
+        v4BlockDeleteFilters.push(filter);
+        return { deletedCount: 5 };
+      },
+    },
+    {
+      target: MessagingDeviceRegistrationV4,
+      key: 'deleteMany',
+      value: async (filter) => {
+        v4DeviceRegistrationDeleteFilters.push(filter);
+        return { deletedCount: 6 };
+      },
+    },
+    {
+      target: MessagingBinding,
+      key: 'deleteMany',
+      value: async (filter) => {
+        v4BindingDeleteFilters.push(filter);
+        return { deletedCount: 7 };
+      },
+    },
+    {
+      target: MessagingAccount,
+      key: 'deleteOne',
+      value: async (filter) => {
+        v4AccountDeleteFilters.push(filter);
+        return { deletedCount: 1 };
+      },
+    },
+    {
+      target: s3Client,
+      key: 'send',
+      value: async (command) => {
+        r2DeleteCommands.push(command);
+        return {};
+      },
+    },
   ], async () => {
     await maybeWithServer(t, async ({ baseUrl }) => {
-      const response = await fetch(`${baseUrl}/lightning-address`, {
+      const response = await fetch(`${baseUrl}/v1/account/delete`, {
         method: 'POST',
         headers: {
-          Cookie: authCookie(String(user._id)),
-          'Content-Type': 'application/json',
+          Cookie: authCookie(String(user._id), user.walletPubkey),
         },
-        body: JSON.stringify({
-          lightningAddress: 'other@example.com',
-        }),
       });
-
       const body = await response.json();
 
       assert.equal(response.status, 200);
-      assert.equal(body.didUpdate, false);
-      assert.equal(body.lightningAddress, 'donate@example.com');
-      assert.equal(user.saveCalls, 0);
+      assert.equal(body.ok, true);
+      assert.equal(user.didDelete, true);
+      assert.deepEqual(deletedDeviceRegistrationFilters, [{ userId: user._id }]);
+      assert.deepEqual(deletedBlockFilters, [{ blockerUserId: user._id }]);
+      assert.deepEqual(messagingAccountFindFilters, [{
+        walletPubkeyMessagingHmac: messagingDataHmac(user.walletPubkey),
+      }]);
+      assert.deepEqual(v4AttachmentFindFilters, [{
+        $or: [
+          { senderMessagingAccountId: messagingAccountId },
+          { recipientMessagingAccountId: messagingAccountId },
+        ],
+      }]);
+      assert.deepEqual(v4AttachmentDeleteFilters, [{ _id: { $in: [attachmentId] } }]);
+      assert.deepEqual(v4DirectMessageDeleteFilters, [{
+        $or: [
+          { senderMessagingAccountId: messagingAccountId },
+          { recipientMessagingAccountId: messagingAccountId },
+        ],
+      }]);
+      assert.deepEqual(v4BlockDeleteFilters, [{
+        $or: [
+          { blockerMessagingAccountId: messagingAccountId },
+          { blockedMessagingAccountId: messagingAccountId },
+        ],
+      }]);
+      assert.deepEqual(v4DeviceRegistrationDeleteFilters, [{ messagingAccountId }]);
+      assert.deepEqual(v4BindingDeleteFilters, [{ messagingAccountId }]);
+      assert.deepEqual(v4AccountDeleteFilters, [{ _id: messagingAccountId }]);
+      assert.deepEqual(
+        r2DeleteCommands.map((command) => command.input.Key).sort(),
+        [
+          'messaging/v4/attachments/account-attachment.bin',
+          'profile-pictures/user-1.png',
+        ]
+      );
+      assert.equal(body.deleted.deviceRegistrations, 2);
+      assert.equal(body.deleted.userBlocks, 3);
+      assert.equal(body.deleted.v4MessagingAccount, 1);
+      assert.equal(body.deleted.v4MessagingBindings, 7);
+      assert.equal(body.deleted.v4DeviceRegistrations, 6);
+      assert.equal(body.deleted.v4UserBlocks, 5);
+      assert.equal(body.deleted.v4DirectMessages, 4);
+      assert.equal(body.deleted.v4Attachments, 1);
+      assert.equal(body.deleted.v4AttachmentObjectsDeleted, 1);
     });
+  });
+  } finally {
+    if (originalMessagingPepper) {
+      process.env.MESSAGING_DATA_PEPPER = originalMessagingPepper;
+    } else {
+      delete process.env.MESSAGING_DATA_PEPPER;
+    }
+  }
+});
+
+test('POST /v1/account/delete requires an authenticated session', async (t) => {
+  await maybeWithServer(t, async ({ baseUrl }) => {
+    const response = await fetch(`${baseUrl}/v1/account/delete`, {
+      method: 'POST',
+    });
+
+    assert.equal(response.status, 401);
   });
 });
 
@@ -596,7 +861,7 @@ test('GET /v1/reward-merchant-pubkey-hashes supports ETag revalidation', async (
 
 test('POST /messaging/v3/identity rejects an invalid wallet signature', async (t) => {
   const user = buildUser({
-    lightningAddress: 'alice@example.com',
+    lightningAddress: 'alice@example.invalid',
   });
 
   await withPatchedMethods([
@@ -630,7 +895,7 @@ test('POST /messaging/v3/identity rejects an invalid wallet signature', async (t
 
 test('POST /messaging/v3/identity stores the current messaging identity when the signature is valid', async (t) => {
   const user = buildUser({
-    lightningAddress: 'alice@example.com',
+    lightningAddress: 'alice@example.invalid',
   });
 
   await withPatchedMethods([
@@ -676,7 +941,7 @@ test('POST /messaging/v3/identity moves old-key pending messages into rekey-requ
   const oldMessagingPubkey = '02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
   const newMessagingPubkey = '02cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc';
   const user = buildUser({
-    lightningAddress: 'alice@example.com',
+    lightningAddress: 'alice@example.invalid',
     messagingPubkeyV2: oldMessagingPubkey,
     messagingIdentityV2Signature: 'old-signature',
     messagingIdentityV2SignatureVersion: 2,
@@ -764,10 +1029,177 @@ test('POST /messaging/v3/identity moves old-key pending messages into rekey-requ
   });
 });
 
+test('POST /messaging/v4/identity moves old-key pending messages into rekey-required when the recipient rotates keys', async (t) => {
+  const originalPepper = process.env.MESSAGING_DATA_PEPPER;
+  process.env.MESSAGING_DATA_PEPPER = 'messaging-v4-identity-rotation-test-pepper';
+
+  const walletPubkey = '02aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+  const oldMessagingPubkey = '02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+  const newMessagingPubkey = '02cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc';
+  const lightningAddressHash = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+  const accountId = new mongoose.Types.ObjectId('507f1f77bcf86cd799439071');
+  const oldBindingId = new mongoose.Types.ObjectId('507f1f77bcf86cd799439072');
+  const newBindingId = new mongoose.Types.ObjectId('507f1f77bcf86cd799439073');
+  const account = {
+    _id: accountId,
+    activeBindingId: oldBindingId,
+    ...buildMessagingAccountHmacs({
+      walletPubkey,
+      lightningAddressHash,
+    }),
+    saveCalls: 0,
+    async save() {
+      this.saveCalls += 1;
+      return this;
+    },
+  };
+  const oldBinding = {
+    _id: oldBindingId,
+    active: true,
+    messagingAccountId: accountId,
+    walletPubkey,
+    lightningAddressHash,
+    lightningAddressHashScheme: LIGHTNING_ADDRESS_CLIENT_HASH_SCHEME,
+    messagingPubkey: oldMessagingPubkey,
+    messagingIdentitySignature: 'old-signature',
+    messagingIdentitySignatureVersion: 4,
+    messagingIdentitySignedAt: new Date('2026-01-01T00:00:00.000Z'),
+  };
+  const directMessageFindCalls = [];
+  const directMessageUpdateCalls = [];
+  const attachmentUpdateCalls = [];
+  const bindingUpdateCalls = [];
+  const deviceDeleteCalls = [];
+
+  await withPatchedMethods([
+    { target: User, key: 'findById', value: () => queryResult(null) },
+    { target: sessionHelper, key: 'verifyBreezSignedMessage', value: () => true },
+    { target: MessagingAccount, key: 'findOne', value: async () => account },
+    { target: MessagingBinding, key: 'findById', value: async () => oldBinding },
+    {
+      target: MessagingBinding,
+      key: 'updateMany',
+      value: async (filter, update) => {
+        bindingUpdateCalls.push({ filter, update });
+        return { modifiedCount: 1 };
+      },
+    },
+    {
+      target: MessagingBinding,
+      key: 'create',
+      value: async (payload) => ({
+        _id: newBindingId,
+        active: true,
+        ...payload,
+      }),
+    },
+    {
+      target: DirectMessageV4,
+      key: 'find',
+      value: (filter) => {
+        directMessageFindCalls.push(filter);
+        return queryResult([
+          {
+            _id: new mongoose.Types.ObjectId('507f1f77bcf86cd799439074'),
+            senderMessagingAccountId: new mongoose.Types.ObjectId('507f1f77bcf86cd799439075'),
+            recipientMessagingAccountId: accountId,
+          },
+        ]);
+      },
+    },
+    {
+      target: DirectMessageV4,
+      key: 'updateMany',
+      value: async (filter, update) => {
+        directMessageUpdateCalls.push({ filter, update });
+        return { modifiedCount: 1 };
+      },
+    },
+    {
+      target: MessageAttachmentV4,
+      key: 'updateMany',
+      value: async (filter, update) => {
+        attachmentUpdateCalls.push({ filter, update });
+        return { modifiedCount: 1 };
+      },
+    },
+    {
+      target: MessagingDeviceRegistrationV4,
+      key: 'deleteMany',
+      value: async (filter) => {
+        deviceDeleteCalls.push(filter);
+        return { deletedCount: 1 };
+      },
+    },
+  ], async () => {
+    try {
+      await maybeWithServer(t, async ({ baseUrl }) => {
+        const response = await fetch(`${baseUrl}/messaging/v4/identity`, {
+          method: 'POST',
+          headers: {
+            Cookie: authCookie(String(accountId), walletPubkey),
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            walletPubkey,
+            lightningAddressHash: oldBinding.lightningAddressHash,
+            lightningAddressHashScheme: LIGHTNING_ADDRESS_CLIENT_HASH_SCHEME,
+            messagingPubkey: newMessagingPubkey,
+            messagingIdentitySignature: 'new-signature',
+            messagingIdentitySignatureVersion: 4,
+            messagingIdentitySignedAt: 1_712_000_123,
+          }),
+        });
+
+        const body = await response.json();
+
+        assert.equal(response.status, 200);
+        assert.equal(body.ok, true);
+        assert.equal(body.didUpdate, true);
+        assert.equal(body.didRotate, true);
+        assert.equal(account.saveCalls, 1);
+        assert.equal(String(account.activeBindingId), String(newBindingId));
+        assert.equal(bindingUpdateCalls.length, 1);
+        assert.deepEqual(bindingUpdateCalls[0].filter, {
+          messagingAccountId: accountId,
+          active: true,
+        });
+        assert.equal(bindingUpdateCalls[0].update.$set.active, false);
+        assert.equal(directMessageFindCalls.length, 1);
+        assert.equal(String(directMessageFindCalls[0].recipientMessagingAccountId), String(accountId));
+        assert.deepEqual(directMessageFindCalls[0].recipientMessagingPubkey.$in, [
+          oldMessagingPubkey,
+        ]);
+        assert.equal(directMessageFindCalls[0].status, 'pending');
+        assert.equal(directMessageUpdateCalls.length, 1);
+        assert.equal(directMessageUpdateCalls[0].update.$set.status, 'rekey_required');
+        assert.ok(directMessageUpdateCalls[0].update.$set.rekeyRequiredAt instanceof Date);
+        assert.equal(attachmentUpdateCalls.length, 1);
+        assert.equal(String(attachmentUpdateCalls[0].filter.recipientMessagingAccountId), String(accountId));
+        assert.equal(attachmentUpdateCalls[0].filter.status, 'linked');
+        assert.equal(attachmentUpdateCalls[0].update.$set.status, 'uploaded');
+        assert.equal(attachmentUpdateCalls[0].update.$unset.linkedMessageId, '');
+        assert.equal(attachmentUpdateCalls[0].update.$unset.linkedClientMessageId, '');
+        assert.equal(deviceDeleteCalls.length, 1);
+        assert.equal(String(deviceDeleteCalls[0].messagingAccountId), String(accountId));
+        assert.deepEqual(deviceDeleteCalls[0].messagingPubkeyHmac, {
+          $ne: buildMessagingPubkeyHmac(newMessagingPubkey),
+        });
+      });
+    } finally {
+      if (originalPepper == null) {
+        delete process.env.MESSAGING_DATA_PEPPER;
+      } else {
+        process.env.MESSAGING_DATA_PEPPER = originalPepper;
+      }
+    }
+  });
+});
+
 test('POST /messaging/v3/directory/lookup returns the signed recipient bundle when both sides are active', async (t) => {
   const sender = buildUser({
     _id: 'sender-1',
-    lightningAddress: 'alice@example.com',
+    lightningAddress: 'alice@example.invalid',
     messagingPubkeyV2: '02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
     messagingIdentityV2Signature: 'sender-signature',
     messagingIdentityV2SignatureVersion: 2,
@@ -776,12 +1208,12 @@ test('POST /messaging/v3/directory/lookup returns the signed recipient bundle wh
   const recipient = buildUser({
     _id: 'recipient-1',
     walletPubkey: '02cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
-    lightningAddress: 'bob@example.com',
+    lightningAddress: 'bob@example.invalid',
     messagingPubkeyV2: '02dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
     messagingIdentityV2Signature: 'recipient-signature',
     messagingIdentityV2SignatureVersion: 2,
     messagingIdentityV2SignedAt: new Date('2026-01-02T00:00:00.000Z'),
-    profilePicUrl: 'https://cdn.example.com/bob.png',
+    profilePicUrl: 'https://cdn.example.invalid/bob.png',
   });
 
   await withPatchedMethods([
@@ -827,13 +1259,13 @@ test('POST /messaging/v3/directory/lookup returns the signed recipient bundle wh
 test('POST /messaging/blocks creates a block by lightningAddress and clears pending relay messages', async (t) => {
   const blocker = buildUser({
     _id: 'blocker-1',
-    lightningAddress: 'alice@example.com',
+    lightningAddress: 'alice@example.invalid',
   });
   const target = buildUser({
     _id: 'blocked-1',
     walletPubkey: '02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
-    lightningAddress: 'bob@example.com',
-    profilePicUrl: 'https://cdn.example.com/bob.png',
+    lightningAddress: 'bob@example.invalid',
+    profilePicUrl: 'https://cdn.example.invalid/bob.png',
   });
   const deletedMessageFilters = [];
 
@@ -925,8 +1357,8 @@ test('GET /messaging/blocks returns the authenticated users block list', async (
       blockerUserId: blocker._id,
       blockedUserId: 'blocked-1',
       blockedWalletPubkey: '02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
-      blockedLightningAddress: 'bob@example.com',
-      blockedProfilePicUrl: 'https://cdn.example.com/bob.png',
+      blockedLightningAddress: 'bob@example.invalid',
+      blockedProfilePicUrl: 'https://cdn.example.invalid/bob.png',
       createdAt: new Date('2026-04-08T12:00:00.000Z'),
       updatedAt: new Date('2026-04-08T12:00:00.000Z'),
     },
@@ -996,7 +1428,7 @@ test('DELETE /messaging/blocks/:blockedWalletPubkey removes a block idempotently
 test('POST /messaging/v3/directory/lookup returns a generic unavailable error when the recipient blocked the sender', async (t) => {
   const sender = buildUser({
     _id: 'sender-1',
-    lightningAddress: 'alice@example.com',
+    lightningAddress: 'alice@example.invalid',
     messagingPubkeyV2: '02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
     messagingIdentityV2Signature: 'sender-v2-signature',
     messagingIdentityV2SignatureVersion: 2,
@@ -1005,7 +1437,7 @@ test('POST /messaging/v3/directory/lookup returns a generic unavailable error wh
   const recipient = buildUser({
     _id: 'recipient-1',
     walletPubkey: '02cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
-    lightningAddress: 'bob@example.com',
+    lightningAddress: 'bob@example.invalid',
     messagingPubkeyV2: '02dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
     messagingIdentityV2Signature: 'recipient-v2-signature',
     messagingIdentityV2SignatureVersion: 2,
@@ -1059,7 +1491,7 @@ test('POST /messaging/v3/directory/lookup returns a generic unavailable error wh
 test('POST /messaging/v3/send rejects sends to a user the sender has blocked', async (t) => {
   const sender = buildUser({
     _id: 'sender-1',
-    lightningAddress: 'alice@example.com',
+    lightningAddress: 'alice@example.invalid',
     messagingPubkeyV2: '02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
     messagingIdentityV2Signature: 'sender-v2-signature',
     messagingIdentityV2SignatureVersion: 2,
@@ -1068,7 +1500,7 @@ test('POST /messaging/v3/send rejects sends to a user the sender has blocked', a
   const recipient = buildUser({
     _id: 'recipient-1',
     walletPubkey: '02cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
-    lightningAddress: 'bob@example.com',
+    lightningAddress: 'bob@example.invalid',
     messagingPubkeyV2: '02dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
     messagingIdentityV2Signature: 'recipient-v2-signature',
     messagingIdentityV2SignatureVersion: 2,
@@ -1136,7 +1568,7 @@ test('POST /messaging/v3/send rejects sends to a user the sender has blocked', a
 
 test('POST /messaging/v3/device-registrations stores a registration for the active messaging pubkey', async (t) => {
   const user = buildUser({
-    lightningAddress: 'alice@example.com',
+    lightningAddress: 'alice@example.invalid',
     messagingPubkeyV2: '02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
     messagingIdentityV2Signature: 'sender-v2-signature',
     messagingIdentityV2SignatureVersion: 2,
@@ -1215,7 +1647,7 @@ test('POST /messaging/v3/device-registrations stores a registration for the acti
 
 test('POST /messaging/v3/ack deletes successfully delivered relay messages', async (t) => {
   const user = buildUser({
-    lightningAddress: 'alice@example.com',
+    lightningAddress: 'alice@example.invalid',
     messagingPubkey: '02aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab',
     messagingPubkeyV2: '02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
   });
@@ -1264,7 +1696,7 @@ test('POST /messaging/v3/ack deletes successfully delivered relay messages', asy
 
 test('POST /messaging/v3/rekey-required marks messages and reopens linked attachments for resend', async (t) => {
   const user = buildUser({
-    lightningAddress: 'alice@example.com',
+    lightningAddress: 'alice@example.invalid',
     messagingPubkeyV2: '02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
   });
   const messageIds = [
@@ -1327,7 +1759,7 @@ test('POST /messaging/v3/rekey-required marks messages and reopens linked attach
 
 test('POST /messaging/v3/decrypt-failed requests one silent retry, then marks the next attempt terminal', async (t) => {
   const user = buildUser({
-    lightningAddress: 'alice@example.com',
+    lightningAddress: 'alice@example.invalid',
     messagingPubkeyV2: '02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
   });
   const directMessageUpdateCalls = [];
@@ -1405,6 +1837,215 @@ test('POST /messaging/v3/decrypt-failed requests one silent retry, then marks th
   });
 });
 
+test('POST /messaging/v4/rekey-required marks v4 messages and reopens linked attachments for resend', async (t) => {
+  const originalPepper = process.env.MESSAGING_DATA_PEPPER;
+  process.env.MESSAGING_DATA_PEPPER = 'messaging-v4-rekey-required-test-pepper';
+
+  const walletPubkey = '02aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+  const accountId = new mongoose.Types.ObjectId('507f1f77bcf86cd799439041');
+  const bindingId = new mongoose.Types.ObjectId('507f1f77bcf86cd799439042');
+  const activeBinding = {
+    _id: bindingId,
+    active: true,
+    messagingPubkey: '02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+  };
+  const messageIds = [
+    '507f1f77bcf86cd799439043',
+    '507f1f77bcf86cd799439044',
+  ];
+  const directMessageUpdateCalls = [];
+  const attachmentUpdateCalls = [];
+
+  await withPatchedMethods([
+    {
+      target: MessagingAccount,
+      key: 'findOne',
+      value: async () => ({
+        _id: accountId,
+        activeBindingId: bindingId,
+      }),
+    },
+    {
+      target: MessagingAccount,
+      key: 'find',
+      value: () => querySelectLeanResult([
+        { _id: accountId, activeBindingId: bindingId },
+      ]),
+    },
+    { target: MessagingBinding, key: 'findById', value: async () => activeBinding },
+    {
+      target: DirectMessageV4,
+      key: 'find',
+      value: () => queryResult(messageIds.map((_id) => ({
+        _id,
+        senderMessagingAccountId: accountId,
+        recipientMessagingAccountId: accountId,
+      }))),
+    },
+    {
+      target: DirectMessageV4,
+      key: 'updateMany',
+      value: async (filter, update) => {
+        directMessageUpdateCalls.push({ filter, update });
+        return { modifiedCount: 2 };
+      },
+    },
+    {
+      target: MessageAttachmentV4,
+      key: 'updateMany',
+      value: async (filter, update) => {
+        attachmentUpdateCalls.push({ filter, update });
+        return { modifiedCount: 1 };
+      },
+    },
+  ], async () => {
+    try {
+      await maybeWithServer(t, async ({ baseUrl }) => {
+        const response = await fetch(`${baseUrl}/messaging/v4/rekey-required`, {
+          method: 'POST',
+          headers: {
+            Cookie: authCookie(String(accountId), walletPubkey),
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ messageIds }),
+        });
+
+        const body = await response.json();
+
+        assert.equal(response.status, 200);
+        assert.equal(body.ok, true);
+        assert.equal(body.updatedCount, 2);
+        assert.equal(body.resetAttachmentCount, 1);
+        assert.equal(directMessageUpdateCalls.length, 1);
+        assert.equal(directMessageUpdateCalls[0].update.$set.status, 'rekey_required');
+        assert.ok(directMessageUpdateCalls[0].update.$set.rekeyRequiredAt instanceof Date);
+        assert.equal(attachmentUpdateCalls.length, 1);
+        assert.equal(String(attachmentUpdateCalls[0].filter.recipientMessagingAccountId), String(accountId));
+        assert.equal(attachmentUpdateCalls[0].update.$set.status, 'uploaded');
+        assert.equal(attachmentUpdateCalls[0].update.$unset.linkedMessageId, '');
+        assert.equal(attachmentUpdateCalls[0].update.$unset.linkedClientMessageId, '');
+      });
+    } finally {
+      if (originalPepper == null) {
+        delete process.env.MESSAGING_DATA_PEPPER;
+      } else {
+        process.env.MESSAGING_DATA_PEPPER = originalPepper;
+      }
+    }
+  });
+});
+
+test('POST /messaging/v4/decrypt-failed mirrors v3 retry and terminal failure behavior', async (t) => {
+  const originalPepper = process.env.MESSAGING_DATA_PEPPER;
+  process.env.MESSAGING_DATA_PEPPER = 'messaging-v4-decrypt-failed-test-pepper';
+
+  const walletPubkey = '02aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+  const accountId = new mongoose.Types.ObjectId('507f1f77bcf86cd799439051');
+  const bindingId = new mongoose.Types.ObjectId('507f1f77bcf86cd799439052');
+  const activeBinding = {
+    _id: bindingId,
+    active: true,
+    messagingPubkey: '02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+  };
+  const directMessageUpdateCalls = [];
+  const attachmentUpdateCalls = [];
+  const retryRequiredId = new mongoose.Types.ObjectId('507f1f77bcf86cd799439053');
+  const failedId = new mongoose.Types.ObjectId('507f1f77bcf86cd799439054');
+
+  await withPatchedMethods([
+    {
+      target: MessagingAccount,
+      key: 'findOne',
+      value: async () => ({
+        _id: accountId,
+        activeBindingId: bindingId,
+      }),
+    },
+    {
+      target: MessagingAccount,
+      key: 'find',
+      value: () => querySelectLeanResult([
+        { _id: accountId, activeBindingId: bindingId },
+      ]),
+    },
+    { target: MessagingBinding, key: 'findById', value: async () => activeBinding },
+    {
+      target: DirectMessageV4,
+      key: 'find',
+      value: () => queryResult([
+        {
+          _id: retryRequiredId,
+          senderMessagingAccountId: accountId,
+          recipientMessagingAccountId: accountId,
+          sameKeyRetryCount: 0,
+        },
+        {
+          _id: failedId,
+          senderMessagingAccountId: accountId,
+          recipientMessagingAccountId: accountId,
+          sameKeyRetryCount: 1,
+        },
+      ]),
+    },
+    {
+      target: DirectMessageV4,
+      key: 'updateMany',
+      value: async (filter, update) => {
+        directMessageUpdateCalls.push({ filter, update });
+        return { modifiedCount: 1 };
+      },
+    },
+    {
+      target: MessageAttachmentV4,
+      key: 'updateMany',
+      value: async (filter, update) => {
+        attachmentUpdateCalls.push({ filter, update });
+        return { modifiedCount: 1 };
+      },
+    },
+  ], async () => {
+    try {
+      await maybeWithServer(t, async ({ baseUrl }) => {
+        const response = await fetch(`${baseUrl}/messaging/v4/decrypt-failed`, {
+          method: 'POST',
+          headers: {
+            Cookie: authCookie(String(accountId), walletPubkey),
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            messageIds: [String(retryRequiredId), String(failedId)],
+          }),
+        });
+
+        const body = await response.json();
+
+        assert.equal(response.status, 200);
+        assert.equal(body.ok, true);
+        assert.equal(body.retryRequiredCount, 1);
+        assert.equal(body.failedCount, 1);
+        assert.equal(body.resetAttachmentCount, 1);
+        assert.equal(directMessageUpdateCalls.length, 2);
+        assert.equal(directMessageUpdateCalls[0].update.$set.status, 'same_key_retry_required');
+        assert.equal(directMessageUpdateCalls[0].update.$set.sameKeyRetryCount, 1);
+        assert.ok(directMessageUpdateCalls[0].update.$set.sameKeyDecryptFailedAt instanceof Date);
+        assert.equal(directMessageUpdateCalls[1].update.$set.status, 'failed_same_key');
+        assert.ok(directMessageUpdateCalls[1].update.$set.failedAt instanceof Date);
+        assert.equal(attachmentUpdateCalls.length, 1);
+        assert.equal(String(attachmentUpdateCalls[0].filter.recipientMessagingAccountId), String(accountId));
+        assert.equal(attachmentUpdateCalls[0].update.$set.status, 'uploaded');
+        assert.equal(attachmentUpdateCalls[0].update.$unset.linkedMessageId, '');
+        assert.equal(attachmentUpdateCalls[0].update.$unset.linkedClientMessageId, '');
+      });
+    } finally {
+      if (originalPepper == null) {
+        delete process.env.MESSAGING_DATA_PEPPER;
+      } else {
+        process.env.MESSAGING_DATA_PEPPER = originalPepper;
+      }
+    }
+  });
+});
+
 test('GET /messaging/v3/outgoing-statuses prioritizes actionable statuses ahead of newer normal traffic', async (t) => {
   const user = buildUser({
     _id: 'sender-status-user-1',
@@ -1414,7 +2055,7 @@ test('GET /messaging/v3/outgoing-statuses prioritizes actionable statuses ahead 
     {
       _id: 'msg-undelivered-1',
       clientMessageId: 'client-undelivered-1',
-      recipientLightningAddress: 'alice@example.com',
+      recipientLightningAddress: 'alice@example.invalid',
       recipientWalletPubkey: 'wallet-undelivered-1',
       status: 'undelivered',
       sameKeyRetryCount: 0,
@@ -1425,7 +2066,7 @@ test('GET /messaging/v3/outgoing-statuses prioritizes actionable statuses ahead 
     {
       _id: 'msg-rekey-1',
       clientMessageId: 'client-rekey-1',
-      recipientLightningAddress: 'bob@example.com',
+      recipientLightningAddress: 'bob@example.invalid',
       recipientWalletPubkey: 'wallet-rekey-1',
       status: 'rekey_required',
       sameKeyRetryCount: 0,
@@ -1505,5 +2146,134 @@ test('GET /messaging/v3/outgoing-statuses prioritizes actionable statuses ahead 
         ['undelivered', 'rekey_required', 'delivered']
       );
     });
+  });
+});
+
+test('GET /messaging/v4/outgoing-statuses prioritizes actionable statuses by messaging account', async (t) => {
+  const originalPepper = process.env.MESSAGING_DATA_PEPPER;
+  process.env.MESSAGING_DATA_PEPPER = 'messaging-v4-outgoing-status-test-pepper';
+
+  const walletPubkey = '02aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+  const accountId = new mongoose.Types.ObjectId('507f1f77bcf86cd799439061');
+  const bindingId = new mongoose.Types.ObjectId('507f1f77bcf86cd799439062');
+  const activeBinding = {
+    _id: bindingId,
+    active: true,
+    messagingPubkey: '02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+  };
+  const findCalls = [];
+  const actionableMessages = [
+    {
+      _id: 'msg-v4-undelivered-1',
+      senderMessagingAccountId: accountId,
+      recipientMessagingAccountId: new mongoose.Types.ObjectId('507f1f77bcf86cd799439063'),
+      clientMessageId: 'client-v4-undelivered-1',
+      status: 'undelivered',
+      sameKeyRetryCount: 0,
+      createdAt: new Date('2026-04-01T10:00:00.000Z'),
+      updatedAt: new Date('2026-04-15T12:00:00.000Z'),
+      expiredAt: new Date('2026-04-15T12:00:00.000Z'),
+    },
+    {
+      _id: 'msg-v4-rekey-1',
+      senderMessagingAccountId: accountId,
+      recipientMessagingAccountId: new mongoose.Types.ObjectId('507f1f77bcf86cd799439064'),
+      clientMessageId: 'client-v4-rekey-1',
+      status: 'rekey_required',
+      sameKeyRetryCount: 0,
+      createdAt: new Date('2026-03-25T09:00:00.000Z'),
+      updatedAt: new Date('2026-04-14T08:30:00.000Z'),
+      rekeyRequiredAt: new Date('2026-04-14T08:30:00.000Z'),
+    },
+  ];
+  const recentMessages = [
+    {
+      _id: 'msg-v4-delivered-1',
+      senderMessagingAccountId: accountId,
+      recipientMessagingAccountId: new mongoose.Types.ObjectId('507f1f77bcf86cd799439065'),
+      clientMessageId: 'client-v4-delivered-1',
+      status: 'delivered',
+      createdAt: new Date('2026-04-16T15:00:00.000Z'),
+      updatedAt: new Date('2026-04-16T15:01:00.000Z'),
+      deliveredAt: new Date('2026-04-16T15:01:00.000Z'),
+    },
+  ];
+
+  await withPatchedMethods([
+    {
+      target: MessagingAccount,
+      key: 'findOne',
+      value: async () => ({
+        _id: accountId,
+        activeBindingId: bindingId,
+      }),
+    },
+    { target: MessagingBinding, key: 'findById', value: async () => activeBinding },
+    {
+      target: DirectMessageV4,
+      key: 'find',
+      value: (filter) => {
+        const call = { filter, sort: null, limit: null };
+        findCalls.push(call);
+
+        const resultSet = filter?.status?.$in
+          ? actionableMessages
+          : recentMessages;
+
+        return {
+          sort(sortSpec) {
+            call.sort = sortSpec;
+            return this;
+          },
+          limit(limitValue) {
+            call.limit = limitValue;
+            return this;
+          },
+          lean: async () => resultSet,
+        };
+      },
+    },
+  ], async () => {
+    try {
+      await maybeWithServer(t, async ({ baseUrl }) => {
+        const response = await fetch(`${baseUrl}/messaging/v4/outgoing-statuses?limit=3`, {
+          headers: {
+            Cookie: authCookie(String(accountId), walletPubkey),
+          },
+        });
+
+        const body = await response.json();
+
+        assert.equal(response.status, 200);
+        assert.equal(body.ok, true);
+        assert.equal(findCalls.length, 2);
+        assert.deepEqual(findCalls[0].filter, {
+          senderMessagingAccountId: accountId,
+          status: { $in: ['rekey_required', 'same_key_retry_required', 'failed_same_key', 'undelivered'] },
+        });
+        assert.deepEqual(findCalls[0].sort, { updatedAt: -1, createdAt: -1 });
+        assert.equal(findCalls[0].limit, 3);
+        assert.deepEqual(findCalls[1].filter, {
+          senderMessagingAccountId: accountId,
+          status: { $nin: ['rekey_required', 'same_key_retry_required', 'failed_same_key', 'undelivered'] },
+        });
+        assert.deepEqual(findCalls[1].sort, { createdAt: -1 });
+        assert.equal(findCalls[1].limit, 1);
+        assert.deepEqual(
+          body.messages.map((message) => message.messageId),
+          ['msg-v4-undelivered-1', 'msg-v4-rekey-1', 'msg-v4-delivered-1']
+        );
+        assert.deepEqual(
+          body.messages.map((message) => message.status),
+          ['undelivered', 'rekey_required', 'delivered']
+        );
+      });
+    } finally {
+      if (originalPepper == null) {
+        delete process.env.MESSAGING_DATA_PEPPER;
+      } else {
+        process.env.MESSAGING_DATA_PEPPER = originalPepper;
+      }
+    }
   });
 });

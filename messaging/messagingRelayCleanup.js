@@ -1,7 +1,9 @@
 const cron = require('node-cron');
 const { DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const DirectMessage = require('../models/DirectMessage');
+const DirectMessageV4 = require('../models/DirectMessageV4');
 const MessageAttachment = require('../models/MessageAttachment');
+const MessageAttachmentV4 = require('../models/MessageAttachmentV4');
 const s3Client = require('../integrations/r2');
 
 const RECEIPT_RETENTION_DAYS = 7;
@@ -14,7 +16,20 @@ const NON_DELIVERED_RECEIPT_STATUSES = [
   'undelivered',
 ];
 
-async function expirePendingMessages({ now = new Date(), directMessageModel = DirectMessage } = {}) {
+const DIRECT_MESSAGE_MODELS = [
+  { model: DirectMessage, label: '' },
+  { model: DirectMessageV4, label: ' v4' },
+];
+const ATTACHMENT_MODELS = [
+  { model: MessageAttachment, label: '' },
+  { model: MessageAttachmentV4, label: ' v4' },
+];
+
+async function expirePendingMessages({
+  now = new Date(),
+  directMessageModel = DirectMessage,
+  modelLabel = '',
+} = {}) {
 
   const result = await directMessageModel.updateMany(
     {
@@ -35,13 +50,27 @@ async function expirePendingMessages({ now = new Date(), directMessageModel = Di
   );
 
   if (result.modifiedCount) {
-    console.log(`Messaging relay cleanup: expired ${result.modifiedCount} pending message(s)`);
+    console.log(`Messaging relay cleanup: expired ${result.modifiedCount}${modelLabel} pending message(s)`);
+  }
+}
+
+async function expirePendingMessagesForAllVersions({
+  now = new Date(),
+  directMessageModels = DIRECT_MESSAGE_MODELS,
+} = {}) {
+  for (const { model, label } of directMessageModels) {
+    await expirePendingMessages({
+      now,
+      directMessageModel: model,
+      modelLabel: label,
+    });
   }
 }
 
 async function pruneOldReceipts({
   now = new Date(),
   directMessageModel = DirectMessage,
+  modelLabel = '',
   retentionDays = RECEIPT_RETENTION_DAYS,
   deliveredReceiptRetentionHours = DELIVERED_RECEIPT_RETENTION_HOURS,
 } = {}) {
@@ -66,7 +95,24 @@ async function pruneOldReceipts({
   });
 
   if (result.deletedCount) {
-    console.log(`Messaging relay cleanup: pruned ${result.deletedCount} old receipt(s)`);
+    console.log(`Messaging relay cleanup: pruned ${result.deletedCount}${modelLabel} old receipt(s)`);
+  }
+}
+
+async function pruneOldReceiptsForAllVersions({
+  now = new Date(),
+  directMessageModels = DIRECT_MESSAGE_MODELS,
+  retentionDays = RECEIPT_RETENTION_DAYS,
+  deliveredReceiptRetentionHours = DELIVERED_RECEIPT_RETENTION_HOURS,
+} = {}) {
+  for (const { model, label } of directMessageModels) {
+    await pruneOldReceipts({
+      now,
+      directMessageModel: model,
+      modelLabel: label,
+      retentionDays,
+      deliveredReceiptRetentionHours,
+    });
   }
 }
 
@@ -92,6 +138,7 @@ async function deleteAttachmentObjectIfPresent({
 async function expirePendingAttachments({
   now = new Date(),
   attachmentModel = MessageAttachment,
+  modelLabel = '',
   storageClient = s3Client,
   bucket = process.env.R2_BUCKET,
 } = {}) {
@@ -120,13 +167,31 @@ async function expirePendingAttachments({
   }
 
   if (expiredCount) {
-    console.log(`Messaging relay cleanup: expired ${expiredCount} attachment(s)`);
+    console.log(`Messaging relay cleanup: expired ${expiredCount}${modelLabel} attachment(s)`);
+  }
+}
+
+async function expirePendingAttachmentsForAllVersions({
+  now = new Date(),
+  attachmentModels = ATTACHMENT_MODELS,
+  storageClient = s3Client,
+  bucket = process.env.R2_BUCKET,
+} = {}) {
+  for (const { model, label } of attachmentModels) {
+    await expirePendingAttachments({
+      now,
+      attachmentModel: model,
+      modelLabel: label,
+      storageClient,
+      bucket,
+    });
   }
 }
 
 async function pruneOldAttachmentReceipts({
   now = new Date(),
   attachmentModel = MessageAttachment,
+  modelLabel = '',
   storageClient = s3Client,
   bucket = process.env.R2_BUCKET,
   retentionDays = RECEIPT_RETENTION_DAYS,
@@ -155,17 +220,36 @@ async function pruneOldAttachmentReceipts({
   });
 
   if (result.deletedCount) {
-    console.log(`Messaging relay cleanup: pruned ${result.deletedCount} old attachment receipt(s)`);
+    console.log(`Messaging relay cleanup: pruned ${result.deletedCount}${modelLabel} old attachment receipt(s)`);
+  }
+}
+
+async function pruneOldAttachmentReceiptsForAllVersions({
+  now = new Date(),
+  attachmentModels = ATTACHMENT_MODELS,
+  storageClient = s3Client,
+  bucket = process.env.R2_BUCKET,
+  retentionDays = RECEIPT_RETENTION_DAYS,
+} = {}) {
+  for (const { model, label } of attachmentModels) {
+    await pruneOldAttachmentReceipts({
+      now,
+      attachmentModel: model,
+      modelLabel: label,
+      storageClient,
+      bucket,
+      retentionDays,
+    });
   }
 }
 
 function startMessagingRelayCleanup() {
   const runCleanup = async () => {
     try {
-      await expirePendingMessages();
-      await pruneOldReceipts();
-      await expirePendingAttachments();
-      await pruneOldAttachmentReceipts();
+      await expirePendingMessagesForAllVersions();
+      await pruneOldReceiptsForAllVersions();
+      await expirePendingAttachmentsForAllVersions();
+      await pruneOldAttachmentReceiptsForAllVersions();
     } catch (error) {
       console.error('Messaging relay cleanup failed:', error);
     }
@@ -177,12 +261,18 @@ function startMessagingRelayCleanup() {
 
 module.exports = {
   ATTACHMENT_TERMINAL_STATUSES,
+  ATTACHMENT_MODELS,
   DELIVERED_RECEIPT_RETENTION_HOURS,
+  DIRECT_MESSAGE_MODELS,
   NON_DELIVERED_RECEIPT_STATUSES,
   deleteAttachmentObjectIfPresent,
   expirePendingAttachments,
+  expirePendingAttachmentsForAllVersions,
+  expirePendingMessagesForAllVersions,
   startMessagingRelayCleanup,
   expirePendingMessages,
   pruneOldAttachmentReceipts,
+  pruneOldAttachmentReceiptsForAllVersions,
   pruneOldReceipts,
+  pruneOldReceiptsForAllVersions,
 };

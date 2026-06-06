@@ -11,6 +11,18 @@ const userSchema = new mongoose.Schema(
       immutable: true,
     },
 
+    walletPubkeyUserHmac: {
+      type: String,
+      unique: true,
+      sparse: true,
+      index: true,
+    },
+
+    walletPubkeyUserHmacVersion: {
+      type: String,
+      default: null,
+    },
+
     sparkAddress: {
       type: String,
       unique: true,
@@ -18,11 +30,35 @@ const userSchema = new mongoose.Schema(
       index: true,
     },
 
+    sparkAddressUserHmac: {
+      type: String,
+      unique: true,
+      sparse: true,
+      index: true,
+    },
+
+    sparkAddressUserHmacVersion: {
+      type: String,
+      default: null,
+    },
+
     lightningAddress: {
       type: String,
       unique: true,
       sparse: true,
       index: true,
+    },
+
+    lightningAddressUserHmac: {
+      type: String,
+      unique: true,
+      sparse: true,
+      index: true,
+    },
+
+    lightningAddressUserHmacVersion: {
+      type: String,
+      default: null,
     },
 
     profilePicUrl: {

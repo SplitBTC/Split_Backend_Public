@@ -12,11 +12,19 @@ const s3Client = require('../integrations/r2');
 const User = require('../models/User');
 const Coupon = require('../models/Coupon');
 const CouponRedemption = require('../models/CouponRedemption');
+const MessagingDeviceRegistration = require('../models/MessagingDeviceRegistration');
+const MessagingAccount = require('../models/MessagingAccount');
+const MessagingBinding = require('../models/MessagingBinding');
+const MessagingDeviceRegistrationV4 = require('../models/MessagingDeviceRegistrationV4');
+const DirectMessageV4 = require('../models/DirectMessageV4');
+const UserBlockV4 = require('../models/UserBlockV4');
+const MessageAttachmentV4 = require('../models/MessageAttachmentV4');
 const MerchantPubKey = require('../models/MerchantPubKey');
 const PlatformAnalytics = require('../models/PlatformAnalytics');
 const PlatformWallet = require('../models/PlatformWallet');
 const RewardSpendPayment = require('../models/RewardSpendPayment');
 const RewardPayoutAllocation = require('../models/RewardPayoutAllocation');
+const UserBlock = require('../models/UserBlock');
 const userAuthMiddleware = require('../middlewares/userAuthMiddleware');
 const userRewardSpendFunction = require('../rewards/userRewardSpendFunction');
 const rewardClaimEncryption = require('../rewards/rewardClaimEncryption');
@@ -24,6 +32,14 @@ const { decodeBolt11 } = require('../rewards/bolt11Invoice');
 const { normalizeProof32ByteHex } = require('../rewards/rewardProofEncoding');
 const sessionHelper = require('../auth/sessionHelper');
 const googleMapsAddressValidation = require('../services/googleMapsAddressValidation');
+const {
+  assignUserPrivacyFields,
+  buildUserPrivacyFields,
+} = require('../services/userPrivacy');
+const {
+  messagingDataHmac,
+  normalizeWalletPubkey,
+} = require('../services/privacyCrypto');
 const breezApiKey = process.env.BREEZ_API_KEY;
 const upload = multer({
   limits: {
@@ -84,6 +100,149 @@ function rewardClaimTrace(event, details = {}) {
     event,
     JSON.stringify(details)
   );
+}
+
+function r2ObjectKeyFromPublicUrl(publicUrl) {
+  if (!publicUrl || typeof publicUrl !== 'string') {
+    return '';
+  }
+
+  const trimmed = publicUrl.trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  try {
+    const parsedUrl = new URL(trimmed);
+    return decodeURIComponent(parsedUrl.pathname.replace(/^\/+/, ''));
+  } catch (_error) {
+    return trimmed.split('?')[0].split('/').pop() || '';
+  }
+}
+
+async function deleteProfilePictureFromR2(profilePicUrl) {
+  const objectKey = r2ObjectKeyFromPublicUrl(profilePicUrl);
+  if (!objectKey) {
+    return false;
+  }
+
+  try {
+    await s3Client.send(new DeleteObjectCommand({
+      Bucket: process.env.R2_BUCKET,
+      Key: objectKey,
+    }));
+    return true;
+  } catch (error) {
+    console.warn('Failed to delete profile picture during account deletion:', error.message);
+    return false;
+  }
+}
+
+async function deleteObjectFromR2(objectKey, logContext) {
+  if (!objectKey || typeof objectKey !== 'string') {
+    return false;
+  }
+
+  try {
+    await s3Client.send(new DeleteObjectCommand({
+      Bucket: process.env.R2_BUCKET,
+      Key: objectKey,
+    }));
+    return true;
+  } catch (error) {
+    console.warn(`Failed to delete ${logContext} from R2:`, error.message);
+    return false;
+  }
+}
+
+async function deleteMessagingV4AccountDataForUser(user, req) {
+  const walletPubkey = normalizeWalletPubkey(req.pubkey || user.walletPubkey);
+  if (!walletPubkey) {
+    return null;
+  }
+
+  let walletPubkeyMessagingHmac;
+  try {
+    walletPubkeyMessagingHmac = messagingDataHmac(walletPubkey);
+  } catch (error) {
+    console.warn('Skipping v4 messaging cleanup during account deletion:', error.message);
+    return null;
+  }
+
+  const messagingAccount = await MessagingAccount
+    .findOne({ walletPubkeyMessagingHmac })
+    .select('_id');
+  if (!messagingAccount) {
+    return {
+      account: 0,
+      bindings: 0,
+      deviceRegistrations: 0,
+      userBlocks: 0,
+      directMessages: 0,
+      attachments: 0,
+      attachmentObjectsDeleted: 0,
+    };
+  }
+
+  const messagingAccountId = messagingAccount._id;
+  const ownedAttachmentFilter = {
+    $or: [
+      { senderMessagingAccountId: messagingAccountId },
+      { recipientMessagingAccountId: messagingAccountId },
+    ],
+  };
+  const attachmentDocs = await MessageAttachmentV4
+    .find(ownedAttachmentFilter)
+    .select('_id objectKey');
+
+  let attachmentObjectsDeleted = 0;
+  await Promise.all(attachmentDocs.map(async (attachment) => {
+    const deleted = await deleteObjectFromR2(attachment.objectKey, 'v4 messaging attachment');
+    if (deleted) {
+      attachmentObjectsDeleted += 1;
+    }
+  }));
+
+  const attachmentIds = attachmentDocs.map((attachment) => attachment._id);
+  const attachmentDeleteFilter = attachmentIds.length
+    ? { _id: { $in: attachmentIds } }
+    : ownedAttachmentFilter;
+
+  const [
+    attachmentResult,
+    directMessageResult,
+    userBlockResult,
+    deviceRegistrationResult,
+    bindingResult,
+    accountResult,
+  ] = await Promise.all([
+    MessageAttachmentV4.deleteMany(attachmentDeleteFilter),
+    DirectMessageV4.deleteMany({
+      $or: [
+        { senderMessagingAccountId: messagingAccountId },
+        { recipientMessagingAccountId: messagingAccountId },
+      ],
+    }),
+    UserBlockV4.deleteMany({
+      $or: [
+        { blockerMessagingAccountId: messagingAccountId },
+        { blockedMessagingAccountId: messagingAccountId },
+      ],
+    }),
+    MessagingDeviceRegistrationV4.deleteMany({ messagingAccountId }),
+    MessagingBinding.deleteMany({ messagingAccountId }),
+    MessagingAccount.deleteOne({ _id: messagingAccountId }),
+  ]);
+
+  return {
+    account: accountResult.deletedCount || 0,
+    bindings: bindingResult.deletedCount || 0,
+    deviceRegistrations: deviceRegistrationResult.deletedCount || 0,
+    userBlocks: userBlockResult.deletedCount || 0,
+    directMessages: directMessageResult.deletedCount || 0,
+    attachments: attachmentResult.deletedCount || 0,
+    attachmentObjectsDeleted,
+  };
 }
 
 const rewardsMinimumVersions = Object.freeze({
@@ -589,6 +748,10 @@ router.post('/auth/wallet-login', async (req, res) => {
     }
 
     const sparkAddrTrim = String(sparkAddress).trim();
+    const userPrivacyFields = buildUserPrivacyFields({
+      walletPubkey: pubkey,
+      sparkAddress: sparkAddrTrim,
+    });
 
     // ✅ Check nonce without consuming it yet
     const nonceRecord = sessionHelper.peekNonce(nonce);
@@ -622,25 +785,49 @@ router.post('/auth/wallet-login', async (req, res) => {
     sessionHelper.consumeNonce(nonce);
 
     // ✅ Find or create user, and backfill sparkAddress if missing
-    let user = await User.findOne({ walletPubkey: pubkey });
+    const userLookup = userPrivacyFields.walletPubkeyUserHmac
+      ? {
+          $or: [
+            { walletPubkeyUserHmac: userPrivacyFields.walletPubkeyUserHmac },
+            { walletPubkey: pubkey },
+          ],
+        }
+      : { walletPubkey: pubkey };
+    let user = await User.findOne(userLookup);
 
     if (!user) {
       user = await User.create({
         walletPubkey: pubkey,     // ✅ required field satisfied
         sparkAddress: sparkAddrTrim,
+        ...userPrivacyFields,
       });
       console.log('New Wallet Linked');
-    } else if (!user.sparkAddress) {
-      // Only set if missing (do not overwrite existing)
-      user.sparkAddress = sparkAddrTrim;
-      await user.save();
-    } else if (user.sparkAddress !== sparkAddrTrim) {
-      // Skeptical safety: log divergence so you can investigate.
-      // You might later decide to reject, rotate, or allow updates.
-      console.warn('sparkAddress mismatch for pubkey:', pubkey, {
-        existing: user.sparkAddress,
-        incoming: sparkAddrTrim,
-      });
+    } else {
+      let didMutateUser = false;
+
+      for (const [key, value] of Object.entries(userPrivacyFields)) {
+        if (user[key] !== value) {
+          user[key] = value;
+          didMutateUser = true;
+        }
+      }
+
+      if (!user.sparkAddress) {
+        // Only set if missing (do not overwrite existing)
+        user.sparkAddress = sparkAddrTrim;
+        didMutateUser = true;
+      } else if (user.sparkAddress !== sparkAddrTrim) {
+        // Skeptical safety: log divergence so you can investigate.
+        // You might later decide to reject, rotate, or allow updates.
+        console.warn('sparkAddress mismatch for pubkey:', pubkey, {
+          existing: user.sparkAddress,
+          incoming: sparkAddrTrim,
+        });
+      }
+
+      if (didMutateUser) {
+        await user.save();
+      }
     }
 
     // Mint 1-hour JWT cookie
@@ -728,18 +915,7 @@ router.post('/Upload_Profile_Pic', userAuthMiddleware, upload.single('profilePic
     }
 
     if (user.profilePicUrl) {
-      const previousKey = user.profilePicUrl.split('?')[0].split('/').pop();
-
-      if (previousKey) {
-        try {
-          await s3Client.send(new DeleteObjectCommand({
-            Bucket: process.env.R2_BUCKET,
-            Key: previousKey,
-          }));
-        } catch (deleteErr) {
-          console.warn('Failed to delete previous profile picture:', deleteErr.message);
-        }
-      }
+      await deleteProfilePictureFromR2(user.profilePicUrl);
     }
 
     const fileName = `${crypto.randomUUID()}.png`;
@@ -761,7 +937,7 @@ router.post('/Upload_Profile_Pic', userAuthMiddleware, upload.single('profilePic
       ACL: 'public-read',
     }));
 
-    const publicUrl = `https://cdn.example.com/${fileName}`;
+    const publicUrl = `https://cdn.example.invalid/${fileName}`;
     user.profilePicUrl = publicUrl;
     await user.save();
 
@@ -795,13 +971,31 @@ router.post('/lightning-address', userAuthMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'lightningAddress format is invalid' });
     }
 
-    const user = await User.findById(userId).select('_id lightningAddress');
+    const user = await User.findById(userId).select(
+      '_id lightningAddress lightningAddressUserHmac lightningAddressUserHmacVersion'
+    );
     if (!user) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
     // no-op if already set
     if (user.lightningAddress) {
+      const existingLightningPrivacyFields = buildUserPrivacyFields({
+        lightningAddress: user.lightningAddress,
+      });
+
+      let didBackfillPrivacyFields = false;
+      for (const [key, value] of Object.entries(existingLightningPrivacyFields)) {
+        if (user[key] !== value) {
+          user[key] = value;
+          didBackfillPrivacyFields = true;
+        }
+      }
+
+      if (didBackfillPrivacyFields) {
+        await user.save();
+      }
+
       return res.status(200).json({
         ok: true,
         didUpdate: false,
@@ -810,6 +1004,9 @@ router.post('/lightning-address', userAuthMiddleware, async (req, res) => {
     }
 
     user.lightningAddress = trimmedLightningAddress;
+    assignUserPrivacyFields(user, {
+      lightningAddress: trimmedLightningAddress,
+    });
     await user.save();
 
     return res.status(200).json({
@@ -1452,33 +1649,55 @@ router.get('/v1/RewardStats', userAuthMiddleware, async (req, res) => {
   }
 });
 
-router.post('/iOS-delete-account', async (req, res) => {
-    try {
-
-        // Expect the userId to be sent in the body of the request
-        const { userId } = req.body;
-
-        if (!userId) {
-            return res.status(400).json({ error: 'Bad Request: No userId provided' });
-        }
-
-        // Fetch user from the database using the userId
-        const user = await User.findById(userId);
-        if (!user) {
-            return res.status(404).json({ error: 'User not found' });
-        }
-
-        // Delete the user account from MongoDB
-        await user.deleteOne();
-        console.log(`User with ID ${userId} deleted from MongoDB`);
-
-        // Send a success response
-        return res.status(200).json({ message: 'Account deleted successfully' });
-    } catch (err) {
-        console.error('Error in delete account endpoint:', err);
-        return res.status(500).json({ error: 'An error occurred while processing the request' });
+async function deleteAuthenticatedAccount(req, res) {
+  try {
+    const userId = req.userId;
+    const user = await User.findById(userId).select('_id walletPubkey profilePicUrl');
+    if (!user) {
+      return res.status(401).json({ ok: false, error: 'Unauthorized' });
     }
-});
+
+    const [
+      deviceRegistrationResult,
+      userBlockResult,
+      profilePicDeleted,
+      messagingV4Deleted,
+    ] = await Promise.all([
+      MessagingDeviceRegistration.deleteMany({ userId: user._id }),
+      UserBlock.deleteMany({ blockerUserId: user._id }),
+      deleteProfilePictureFromR2(user.profilePicUrl),
+      deleteMessagingV4AccountDataForUser(user, req),
+    ]);
+
+    await user.deleteOne();
+
+    res.clearCookie('jwtToken');
+
+    return res.status(200).json({
+      ok: true,
+      message: 'Account deleted successfully',
+      deleted: {
+        user: true,
+        profilePic: profilePicDeleted,
+        deviceRegistrations: deviceRegistrationResult.deletedCount || 0,
+        userBlocks: userBlockResult.deletedCount || 0,
+        v4MessagingAccount: messagingV4Deleted?.account || 0,
+        v4MessagingBindings: messagingV4Deleted?.bindings || 0,
+        v4DeviceRegistrations: messagingV4Deleted?.deviceRegistrations || 0,
+        v4UserBlocks: messagingV4Deleted?.userBlocks || 0,
+        v4DirectMessages: messagingV4Deleted?.directMessages || 0,
+        v4Attachments: messagingV4Deleted?.attachments || 0,
+        v4AttachmentObjectsDeleted: messagingV4Deleted?.attachmentObjectsDeleted || 0,
+      },
+    });
+  } catch (err) {
+    console.error('Error in delete account endpoint:', err);
+    return res.status(500).json({ ok: false, error: 'An error occurred while processing the request' });
+  }
+}
+
+router.post('/v1/account/delete', userAuthMiddleware, deleteAuthenticatedAccount);
+router.post('/iOS-delete-account', userAuthMiddleware, deleteAuthenticatedAccount);
 
 router.getRewardsMinimumVersion = getRewardsMinimumVersion;
 router.rewardsMinimumVersions = rewardsMinimumVersions;

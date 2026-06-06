@@ -124,7 +124,7 @@ async function fetchNonce(baseUrl) {
   const body = await response.json();
 
   assert.equal(response.status, 200);
-  assert.match(body.messageToSign, /domain=merchant\.splitrewards\.app/);
+  assert.match(body.messageToSign, /domain=merchant\.example\.invalid/);
 
   return body.nonce;
 }
