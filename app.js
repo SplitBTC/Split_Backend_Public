@@ -8,7 +8,6 @@ const cookieParser = require('cookie-parser');
 const landingPageRoutes = require('./routes/landingPageRoutes');
 const iOSEndPoints = require('./routes/iOSEndPoints');
 const MessageEndPoints = require('./routes/MessageEndPoints');
-const BitcoinEventRoutes = require('./routes/BitcoinEventRoutes');
 const merchantRoutes = require('./routes/merchant');
 
 function createApp() {
@@ -43,7 +42,6 @@ function createApp() {
   app.use(landingPageRoutes);
   app.use(iOSEndPoints);
   app.use(MessageEndPoints);
-  app.use(BitcoinEventRoutes);
   app.use(merchantRoutes);
 
   return app;

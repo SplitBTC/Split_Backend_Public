@@ -1,6 +1,5 @@
 const {
   USER_HMAC_VERSION,
-  normalizeLightningAddress,
   normalizeSparkAddress,
   normalizeWalletPubkey,
   userDataHmac,
@@ -13,7 +12,6 @@ function hasUserDataPepper() {
 function buildUserPrivacyFields({
   walletPubkey = null,
   sparkAddress = null,
-  lightningAddress = null,
 } = {}, {
   pepper = null,
   requirePepper = false,
@@ -29,7 +27,6 @@ function buildUserPrivacyFields({
   const fields = {};
   const normalizedWalletPubkey = normalizeWalletPubkey(walletPubkey);
   const normalizedSparkAddress = normalizeSparkAddress(sparkAddress);
-  const normalizedLightningAddress = normalizeLightningAddress(lightningAddress);
 
   if (normalizedWalletPubkey) {
     fields.walletPubkeyUserHmac = userDataHmac(normalizedWalletPubkey, { pepper });
@@ -41,26 +38,9 @@ function buildUserPrivacyFields({
     fields.sparkAddressUserHmacVersion = USER_HMAC_VERSION;
   }
 
-  if (normalizedLightningAddress) {
-    fields.lightningAddressUserHmac = userDataHmac(normalizedLightningAddress, { pepper });
-    fields.lightningAddressUserHmacVersion = USER_HMAC_VERSION;
-  }
-
-  return fields;
-}
-
-function assignUserPrivacyFields(user, identityValues, options = {}) {
-  if (!user) return {};
-
-  const fields = buildUserPrivacyFields(identityValues, options);
-  for (const [key, value] of Object.entries(fields)) {
-    user[key] = value;
-  }
-
   return fields;
 }
 
 module.exports = {
   buildUserPrivacyFields,
-  assignUserPrivacyFields,
 };

@@ -1,8 +1,6 @@
 const cron = require('node-cron');
 const { DeleteObjectCommand } = require('@aws-sdk/client-s3');
-const DirectMessage = require('../models/DirectMessage');
 const DirectMessageV4 = require('../models/DirectMessageV4');
-const MessageAttachment = require('../models/MessageAttachment');
 const MessageAttachmentV4 = require('../models/MessageAttachmentV4');
 const s3Client = require('../integrations/r2');
 
@@ -17,18 +15,16 @@ const NON_DELIVERED_RECEIPT_STATUSES = [
 ];
 
 const DIRECT_MESSAGE_MODELS = [
-  { model: DirectMessage, label: '' },
   { model: DirectMessageV4, label: ' v4' },
 ];
 const ATTACHMENT_MODELS = [
-  { model: MessageAttachment, label: '' },
   { model: MessageAttachmentV4, label: ' v4' },
 ];
 
 async function expirePendingMessages({
   now = new Date(),
-  directMessageModel = DirectMessage,
-  modelLabel = '',
+  directMessageModel = DirectMessageV4,
+  modelLabel = ' v4',
 } = {}) {
 
   const result = await directMessageModel.updateMany(
@@ -54,7 +50,7 @@ async function expirePendingMessages({
   }
 }
 
-async function expirePendingMessagesForAllVersions({
+async function expirePendingMessagesForActiveModels({
   now = new Date(),
   directMessageModels = DIRECT_MESSAGE_MODELS,
 } = {}) {
@@ -69,8 +65,8 @@ async function expirePendingMessagesForAllVersions({
 
 async function pruneOldReceipts({
   now = new Date(),
-  directMessageModel = DirectMessage,
-  modelLabel = '',
+  directMessageModel = DirectMessageV4,
+  modelLabel = ' v4',
   retentionDays = RECEIPT_RETENTION_DAYS,
   deliveredReceiptRetentionHours = DELIVERED_RECEIPT_RETENTION_HOURS,
 } = {}) {
@@ -99,7 +95,7 @@ async function pruneOldReceipts({
   }
 }
 
-async function pruneOldReceiptsForAllVersions({
+async function pruneOldReceiptsForActiveModels({
   now = new Date(),
   directMessageModels = DIRECT_MESSAGE_MODELS,
   retentionDays = RECEIPT_RETENTION_DAYS,
@@ -137,8 +133,8 @@ async function deleteAttachmentObjectIfPresent({
 
 async function expirePendingAttachments({
   now = new Date(),
-  attachmentModel = MessageAttachment,
-  modelLabel = '',
+  attachmentModel = MessageAttachmentV4,
+  modelLabel = ' v4',
   storageClient = s3Client,
   bucket = process.env.R2_BUCKET,
 } = {}) {
@@ -171,7 +167,7 @@ async function expirePendingAttachments({
   }
 }
 
-async function expirePendingAttachmentsForAllVersions({
+async function expirePendingAttachmentsForActiveModels({
   now = new Date(),
   attachmentModels = ATTACHMENT_MODELS,
   storageClient = s3Client,
@@ -190,8 +186,8 @@ async function expirePendingAttachmentsForAllVersions({
 
 async function pruneOldAttachmentReceipts({
   now = new Date(),
-  attachmentModel = MessageAttachment,
-  modelLabel = '',
+  attachmentModel = MessageAttachmentV4,
+  modelLabel = ' v4',
   storageClient = s3Client,
   bucket = process.env.R2_BUCKET,
   retentionDays = RECEIPT_RETENTION_DAYS,
@@ -224,7 +220,7 @@ async function pruneOldAttachmentReceipts({
   }
 }
 
-async function pruneOldAttachmentReceiptsForAllVersions({
+async function pruneOldAttachmentReceiptsForActiveModels({
   now = new Date(),
   attachmentModels = ATTACHMENT_MODELS,
   storageClient = s3Client,
@@ -246,10 +242,10 @@ async function pruneOldAttachmentReceiptsForAllVersions({
 function startMessagingRelayCleanup() {
   const runCleanup = async () => {
     try {
-      await expirePendingMessagesForAllVersions();
-      await pruneOldReceiptsForAllVersions();
-      await expirePendingAttachmentsForAllVersions();
-      await pruneOldAttachmentReceiptsForAllVersions();
+      await expirePendingMessagesForActiveModels();
+      await pruneOldReceiptsForActiveModels();
+      await expirePendingAttachmentsForActiveModels();
+      await pruneOldAttachmentReceiptsForActiveModels();
     } catch (error) {
       console.error('Messaging relay cleanup failed:', error);
     }
@@ -267,12 +263,12 @@ module.exports = {
   NON_DELIVERED_RECEIPT_STATUSES,
   deleteAttachmentObjectIfPresent,
   expirePendingAttachments,
-  expirePendingAttachmentsForAllVersions,
-  expirePendingMessagesForAllVersions,
+  expirePendingAttachmentsForActiveModels,
+  expirePendingMessagesForActiveModels,
   startMessagingRelayCleanup,
   expirePendingMessages,
   pruneOldAttachmentReceipts,
-  pruneOldAttachmentReceiptsForAllVersions,
+  pruneOldAttachmentReceiptsForActiveModels,
   pruneOldReceipts,
-  pruneOldReceiptsForAllVersions,
+  pruneOldReceiptsForActiveModels,
 };

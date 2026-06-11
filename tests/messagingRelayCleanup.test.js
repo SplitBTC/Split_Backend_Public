@@ -3,13 +3,13 @@ const assert = require('node:assert/strict');
 
 const {
   expirePendingMessages,
-  expirePendingMessagesForAllVersions,
+  expirePendingMessagesForActiveModels,
   expirePendingAttachments,
-  expirePendingAttachmentsForAllVersions,
+  expirePendingAttachmentsForActiveModels,
   pruneOldAttachmentReceipts,
-  pruneOldAttachmentReceiptsForAllVersions,
+  pruneOldAttachmentReceiptsForActiveModels,
   pruneOldReceipts,
-  pruneOldReceiptsForAllVersions,
+  pruneOldReceiptsForActiveModels,
 } = require('../messaging/messagingRelayCleanup');
 
 function buildQueryReturning(value) {
@@ -26,7 +26,7 @@ test('expirePendingAttachments deletes expired attachment blobs and marks record
   const attachments = [
     {
       _id: 'att-1',
-      objectKey: 'messaging-attachments/u1/file-1.bin',
+      objectKey: 'messaging-v4-attachments/u1/file-1.bin',
       status: 'uploaded',
       deletedAt: null,
       async save() {
@@ -39,7 +39,7 @@ test('expirePendingAttachments deletes expired attachment blobs and marks record
     },
     {
       _id: 'att-2',
-      objectKey: 'messaging-attachments/u1/file-2.bin',
+      objectKey: 'messaging-v4-attachments/u1/file-2.bin',
       status: 'linked',
       deletedAt: null,
       async save() {
@@ -78,8 +78,8 @@ test('expirePendingAttachments deletes expired attachment blobs and marks record
 
   assert.equal(deleteCommands.length, 2);
   assert.deepEqual(deleteCommands.map((entry) => entry.Key), [
-    'messaging-attachments/u1/file-1.bin',
-    'messaging-attachments/u1/file-2.bin',
+    'messaging-v4-attachments/u1/file-1.bin',
+    'messaging-v4-attachments/u1/file-2.bin',
   ]);
   assert.equal(saveCalls.length, 2);
   assert.deepEqual(saveCalls.map((entry) => entry.status), ['expired', 'expired']);
@@ -120,7 +120,7 @@ test('expirePendingMessages marks expired pending rows as undelivered and clears
   });
 });
 
-test('expirePendingAttachmentsForAllVersions expires v3 and v4 attachment collections', async () => {
+test('expirePendingAttachmentsForActiveModels expires configured attachment collections', async () => {
   const now = new Date('2026-04-02T12:00:00.000Z');
   const saveCalls = [];
   const deleteCommands = [];
@@ -155,26 +155,22 @@ test('expirePendingAttachmentsForAllVersions expires v3 and v4 attachment collec
     },
   };
 
-  await expirePendingAttachmentsForAllVersions({
+  await expirePendingAttachmentsForActiveModels({
     now,
-    attachmentModels: [
-      { model: buildAttachmentModel('v3'), label: '' },
-      { model: buildAttachmentModel('v4'), label: ' v4' },
-    ],
+    attachmentModels: [{ model: buildAttachmentModel('v4'), label: ' v4' }],
     storageClient,
     bucket: 'split-test-bucket',
   });
 
-  assert.deepEqual(saveCalls.map((entry) => entry.name), ['v3', 'v4']);
-  assert.deepEqual(saveCalls.map((entry) => entry.status), ['expired', 'expired']);
-  assert.deepEqual(saveCalls.map((entry) => entry.deletedAt), [now, now]);
+  assert.deepEqual(saveCalls.map((entry) => entry.name), ['v4']);
+  assert.deepEqual(saveCalls.map((entry) => entry.status), ['expired']);
+  assert.deepEqual(saveCalls.map((entry) => entry.deletedAt), [now]);
   assert.deepEqual(deleteCommands.map((entry) => entry.Key), [
-    'messaging-v3-attachments/file.bin',
     'messaging-v4-attachments/file.bin',
   ]);
 });
 
-test('expirePendingMessagesForAllVersions expires v3 and v4 relay collections', async () => {
+test('expirePendingMessagesForActiveModels expires configured relay collections', async () => {
   const now = new Date('2026-04-02T12:00:00.000Z');
   const updateCalls = [];
 
@@ -187,15 +183,12 @@ test('expirePendingMessagesForAllVersions expires v3 and v4 relay collections', 
     };
   }
 
-  await expirePendingMessagesForAllVersions({
+  await expirePendingMessagesForActiveModels({
     now,
-    directMessageModels: [
-      { model: buildDirectMessageModel('v3'), label: '' },
-      { model: buildDirectMessageModel('v4'), label: ' v4' },
-    ],
+    directMessageModels: [{ model: buildDirectMessageModel('v4'), label: ' v4' }],
   });
 
-  assert.deepEqual(updateCalls.map((entry) => entry.name), ['v3', 'v4']);
+  assert.deepEqual(updateCalls.map((entry) => entry.name), ['v4']);
   for (const call of updateCalls) {
     assert.deepEqual(call.filter, {
       status: 'pending',
@@ -250,7 +243,7 @@ test('pruneOldReceipts deletes delivered receipts by receipt expiry and keeps fa
   });
 });
 
-test('pruneOldReceiptsForAllVersions prunes v3 and v4 relay receipts', async () => {
+test('pruneOldReceiptsForActiveModels prunes configured relay receipts', async () => {
   const now = new Date('2026-04-02T12:00:00.000Z');
   const deleteCalls = [];
 
@@ -263,15 +256,12 @@ test('pruneOldReceiptsForAllVersions prunes v3 and v4 relay receipts', async () 
     };
   }
 
-  await pruneOldReceiptsForAllVersions({
+  await pruneOldReceiptsForActiveModels({
     now,
-    directMessageModels: [
-      { model: buildDirectMessageModel('v3'), label: '' },
-      { model: buildDirectMessageModel('v4'), label: ' v4' },
-    ],
+    directMessageModels: [{ model: buildDirectMessageModel('v4'), label: ' v4' }],
   });
 
-  assert.deepEqual(deleteCalls.map((entry) => entry.name), ['v3', 'v4']);
+  assert.deepEqual(deleteCalls.map((entry) => entry.name), ['v4']);
   for (const call of deleteCalls) {
     assert.deepEqual(call.filter, {
       $or: [
@@ -298,8 +288,8 @@ test('pruneOldAttachmentReceipts deletes old terminal attachment records after d
   const deleteCommands = [];
 
   const attachments = [
-    { _id: 'att-r1', objectKey: 'messaging-attachments/u2/file-r1.bin' },
-    { _id: 'att-r2', objectKey: 'messaging-attachments/u2/file-r2.bin' },
+    { _id: 'att-r1', objectKey: 'messaging-v4-attachments/u2/file-r1.bin' },
+    { _id: 'att-r2', objectKey: 'messaging-v4-attachments/u2/file-r2.bin' },
   ];
 
   const attachmentModel = {
@@ -332,13 +322,13 @@ test('pruneOldAttachmentReceipts deletes old terminal attachment records after d
 
   assert.equal(deleteCommands.length, 2);
   assert.deepEqual(deleteCommands.map((entry) => entry.Key), [
-    'messaging-attachments/u2/file-r1.bin',
-    'messaging-attachments/u2/file-r2.bin',
+    'messaging-v4-attachments/u2/file-r1.bin',
+    'messaging-v4-attachments/u2/file-r2.bin',
   ]);
   assert.deepEqual(deletedIds, ['att-r1', 'att-r2']);
 });
 
-test('pruneOldAttachmentReceiptsForAllVersions prunes v3 and v4 terminal attachment records', async () => {
+test('pruneOldAttachmentReceiptsForActiveModels prunes configured terminal attachment records', async () => {
   const now = new Date('2026-04-02T12:00:00.000Z');
   const deleteCommands = [];
   const deleteCalls = [];
@@ -369,23 +359,16 @@ test('pruneOldAttachmentReceiptsForAllVersions prunes v3 and v4 terminal attachm
     },
   };
 
-  await pruneOldAttachmentReceiptsForAllVersions({
+  await pruneOldAttachmentReceiptsForActiveModels({
     now,
-    attachmentModels: [
-      { model: buildAttachmentModel('v3'), label: '' },
-      { model: buildAttachmentModel('v4'), label: ' v4' },
-    ],
+    attachmentModels: [{ model: buildAttachmentModel('v4'), label: ' v4' }],
     storageClient,
     bucket: 'split-test-bucket',
   });
 
-  assert.deepEqual(deleteCalls.map((entry) => entry.name), ['v3', 'v4']);
-  assert.deepEqual(deleteCalls.map((entry) => entry.ids), [
-    ['v3-att-r1'],
-    ['v4-att-r1'],
-  ]);
+  assert.deepEqual(deleteCalls.map((entry) => entry.name), ['v4']);
+  assert.deepEqual(deleteCalls.map((entry) => entry.ids), [['v4-att-r1']]);
   assert.deepEqual(deleteCommands.map((entry) => entry.Key), [
-    'messaging-v3-attachments/old.bin',
     'messaging-v4-attachments/old.bin',
   ]);
 });

@@ -26,7 +26,6 @@
     "mongoose": "^8.18.0",
     "multer": "^2.0.2",
     "node-cron": "^4.2.1",
-    "qrcode": "^1.5.4",
     "sharp": "^0.34.3"
   },
   "devDependencies": {

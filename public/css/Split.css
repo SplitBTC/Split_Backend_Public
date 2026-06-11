@@ -127,27 +127,6 @@ h3 {
     text-align: center;
 
 }
-/* Coupon Screen */
-.tab-container {
-    border: 1px solid #ccc;
-    border-radius: 5px;
-    overflow: hidden;
-    margin-bottom: 20px;
-}
-
-.tab {
-    float: left;
-    cursor: pointer;
-    padding: 10px 20px;
-    background-color: #f2f2f2;
-    border-right: 1px solid #ccc;
-    border-radius: 5px 5px 0 0;
-}
-
-.tab:last-child {
-    border-right: none;
-}
-
 
 .form-container {
     display: none;
@@ -833,11 +812,6 @@ label {
     text-align: center;
 }
 
-/*-------------------------------------------Customer Coupons Screen-------------------------------------------------*/
-.coupon-body {
-    background-color: white;
-}
-
 .rewards-header-container {
     display: flex;
     flex-direction: column;
@@ -845,83 +819,6 @@ label {
     top: 0;
     left: 0;
 }
-
-    .spend-box {
-        margin-top: 18%;
-        padding: 8px;
-        padding-bottom: .25%;
-        background-color: #e2e4fd;
-        text-align: center;
-        font-size: 16px;
-        font-weight: bold;
-        color: var(--third-color);
-        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-        }
-
-    .spend-box h4 {
-        font-size: 18px;
-        }
-
-    .spend-box button {
-        background-color: transparent;
-        border: none;
-        text-decoration: none;
-        color: black;
-        font-size: 16px;
-        cursor: pointer;
-        padding: 0;
-        }
-    .userSpend {
-        color: var(--secondary-color);
-        font-weight: bold;
-        }
-
-    .splitSpend {
-        font-weight: bold;
-        color: var(--third-color)
-    }
-
-    .coupon-content {
-        margin-top: 55%;
-        width: 100%;
-        box-sizing: border-box;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        background-color: white;
-        }
-
-.coupons-container {
-    background-color: white;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-    padding: 2%;
-    margin: 2% auto;
-    margin-top: 8%;
-    margin-bottom: 8%;
-    width: 85%;
-    text-align: center;
-    }
-
-.coupons-container a {
-    text-decoration: none;
-    display: block;
-    transition: background-color 0.3s ease;
-    }
-
-.coupons-container a:hover {
-    background-color: #f0f0f0;
-    }
-
-.coupons-container h2 {
-    text-align: center;
-    font-size: 24px;
-    color: var(--secondary-color);
-    }
-
-.coupons-container p {
-    color: var(--third-color);
-    text-align: center;
-    }
 
 .price {
     color: var(--secondary-color);
@@ -980,15 +877,6 @@ label {
 .transaction-box hr {
     width: 60%;
 }
-/*-------------------------------------------------Customer-QR-Coupon-Screen--------------------------------------------------------*/
-.qr-code {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    text-align: center;
-}
-
 
 /*------------------------------------------------Customer Payment Method Screen--------------------------------------------------*/
 
@@ -1519,77 +1407,6 @@ label {
 .business-pending-payout p {
     color: var(--secondary-color);
     font-weight: bold;
-    }
-/*----------------------------------------------Business Coupon Screen--------------------------------------------*/
-
-.business-coupon-content {
-    padding: 5%;
-    margin-top: 20%;
-    margin-bottom: 10%;
-    width: 90%;
-    justify-content: center;
-    align-items: center;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    background-color: white;
-    }
-
-.business-coupon-form {
-    background-color: #fff;
-    padding: 20px;
-    border-radius: 8px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-    width: 90%;
-    margin: 1% auto;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    }
-
-.business-coupon-form label {
-    margin-top: 4%;
-    font-size: 18px;
-    color: var(--secondary-color);
-    width: 100%;
-    }
-
-.business-coupon-form textarea {
-    font-size: 16px;
-    color: var(--third-color);
-    width: 100%;
-    max-width: 100%;
-    margin-top: 10px;
-    padding: 10px;
-    box-sizing: border-box;
-    }
-
-.business-coupon-button,
-.business-coupon-cancel-button {
-    background-color: var(--secondary-color);
-    color: #fff;
-    padding: 10px;
-    border: none;
-    cursor: pointer;
-    font-size: 16px;
-    display: block;
-    margin: 0 auto;
-    margin-bottom: 2%;
-    width: 40%;
-    border-radius: 15px;
-    text-align: center;
-    }
-
-.business-coupon-button:hover {
-    background-color: var(--primary-color);
-    }
-
-.business-coupon-cancel-button {
-    background-color: var(--primary-color);
-    }
-
-.business-coupon-cancel-button:hover {
-    background-color: var(--secondary-color);
     }
 
 /*--------------------------------------------------Business Transaction Screen-----------------------------------*/

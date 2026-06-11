@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <title>Split | Android APK</title>
+  <meta
+    name="description"
+    content="Download the Split Android APK for devices that need direct installation."
+  />
+
+  <link rel="stylesheet" href="/css/AndroidApk.css" type="text/css" />
+</head>
+<body>
+  <%
+    const apkUrl = (typeof ANDROID_APK_URL !== 'undefined' && ANDROID_APK_URL)
+      ? ANDROID_APK_URL
+      : '';
+    const apkSha256 = (typeof ANDROID_APK_SHA256 !== 'undefined' && ANDROID_APK_SHA256)
+      ? ANDROID_APK_SHA256
+      : '';
+    const apkVersion = (typeof ANDROID_APK_VERSION !== 'undefined' && ANDROID_APK_VERSION)
+      ? ANDROID_APK_VERSION
+      : '';
+    const playStoreUrl = (typeof PLAY_STORE_URL !== 'undefined' && PLAY_STORE_URL)
+      ? PLAY_STORE_URL
+      : 'https://play.google.com/store/apps/details?id=com.example.android&pcampaignid=web_share';
+  %>
+
+  <main class="apk-page">
+    <nav class="topbar" aria-label="Split Android APK navigation">
+      <a href="/Home" class="brand-mark" aria-label="Split home">
+        <img src="/Split-images/split-logo-black-white-tile.png" alt="Split" class="brand-mark__logo" />
+        <span class="brand-mark__text">Split</span>
+      </a>
+    </nav>
+
+    <section class="apk-panel" aria-labelledby="apk-title">
+      <p class="eyebrow">Android Direct Install</p>
+      <h1 id="apk-title">Download the Split APK</h1>
+      <p class="intro">
+        This APK is for Android users who need to install Split directly instead of using Google Play.
+        The Play Store remains the recommended install path for most devices.
+      </p>
+
+      <div class="actions">
+        <% if (apkUrl) { %>
+          <a class="button button--primary" href="<%= apkUrl %>" download>
+            Download APK<% if (apkVersion) { %> <span><%= apkVersion %></span><% } %>
+          </a>
+        <% } else { %>
+          <span class="button button--disabled" aria-disabled="true">
+            APK download coming soon
+          </span>
+        <% } %>
+
+        <a class="button button--secondary" href="<%= playStoreUrl %>" target="_blank" rel="noopener">
+          Open Play Store
+        </a>
+      </div>
+
+      <% if (apkSha256) { %>
+        <section class="checksum" aria-label="APK SHA-256 checksum">
+          <h2>SHA-256</h2>
+          <code><%= apkSha256 %></code>
+        </section>
+      <% } %>
+
+      <section class="notes" aria-label="Android APK notes">
+        <h2>Before Installing</h2>
+        <ul>
+          <li>Only install this file from the official Split link.</li>
+          <li>Push notifications may require Google Play services or another compatible FCM setup.</li>
+          <li>Future APK updates must be signed by the same Split Android signing key.</li>
+        </ul>
+      </section>
+    </section>
+  </main>
+</body>
+</html>

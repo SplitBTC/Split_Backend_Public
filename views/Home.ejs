@@ -12,10 +12,10 @@
   <%
     const appStoreUrl = (typeof APP_STORE_URL !== 'undefined' && APP_STORE_URL)
       ? APP_STORE_URL
-      : 'https://example.invalid/ios';
+      : 'https://apps.apple.com/app/idYOUR_APP_ID';
     const playStoreUrl = (typeof PLAY_STORE_URL !== 'undefined' && PLAY_STORE_URL)
       ? PLAY_STORE_URL
-      : 'https://example.invalid/android';
+      : 'https://play.google.com/store/apps/details?id=com.example.android&pcampaignid=web_share';
   %>
 
   <main class="home-page">
@@ -95,31 +95,7 @@
 
       <div class="section-media" aria-hidden="true">
         <div class="phone-frame phone-frame--rewards">
-          <img src="/Split-images/split-rewards-screen.png" alt="" />
-        </div>
-      </div>
-    </section>
-
-    <section class="landing-section landing-section--promos" data-theme="pink" aria-label="Bitcoin merchant promotions with Split">
-      <div class="section-copy">
-        <h1 class="section-title">
-          <span class="title-line">
-            <span>Exclusive</span>
-          </span>
-          <span class="title-line">
-            <img class="bitcoin-wordmark" src="/Split-images/bitcoin-token.png" alt="Bitcoin" />
-            <span>promos</span>
-          </span>
-        </h1>
-
-        <p class="section-subtext">
-          Take advantage of monthly deals offered by Bitcoin Merchants who are grateful that you pay them with sats.
-        </p>
-      </div>
-
-      <div class="section-media" aria-hidden="true">
-        <div class="phone-frame phone-frame--promos">
-          <img src="/Split-images/split-promos-screen.png" alt="" />
+          <img src="/Split-images/split-rewards-presentation-screen.png" alt="" />
         </div>
       </div>
     </section>
@@ -137,6 +113,25 @@
       <div class="section-media" aria-hidden="true">
         <div class="phone-frame phone-frame--messages">
           <img src="/Split-images/split-messages-screen.png" alt="" />
+        </div>
+      </div>
+    </section>
+
+    <section class="landing-section landing-section--lightning" data-theme="berry" aria-label="Connect your Lightning node with Split">
+      <div class="section-copy">
+        <h1 class="section-title">
+          <span class="title-line">Your own node.</span>
+          <span class="title-line">Your own wallet.</span>
+        </h1>
+
+        <p class="section-subtext">
+          Take advantage of everything Split has to offer without sacrificing your sovereignty. Connect as many nodes or wallets as you'd like.
+        </p>
+      </div>
+
+      <div class="section-media" aria-hidden="true">
+        <div class="phone-frame phone-frame--lightning">
+          <img src="/Split-images/split-lightning-connections-screen.png" alt="" />
         </div>
       </div>
     </section>
@@ -160,51 +155,6 @@
       <div class="section-media" aria-hidden="true">
         <div class="phone-frame phone-frame--buy">
           <img src="/Split-images/split-buy-bitcoin-screen.png" alt="" />
-        </div>
-      </div>
-    </section>
-
-    <section class="landing-section landing-section--lightning" data-theme="deep-blue" aria-label="Connect your Lightning node with Split">
-      <div class="section-copy">
-        <h1 class="section-title">
-          <span class="title-line">Your own Node or</span>
-          <span class="title-line">NWC wallet.</span>
-        </h1>
-
-        <p class="section-subtext">
-          Take advantage of everything Split has to offer without sacrificing your sovereignty. Connect as many nodes or wallets as you'd like.
-        </p>
-      </div>
-
-      <div class="section-media" aria-hidden="true">
-        <div class="phone-frame phone-frame--lightning">
-          <img src="/Split-images/split-lightning-connections-screen.png" alt="" />
-        </div>
-      </div>
-    </section>
-
-    <section class="landing-section landing-section--events" data-theme="teal" aria-label="Local Bitcoin events with Split">
-      <div class="section-copy">
-        <h1 class="section-title">
-          <span class="title-line">
-            <span>Local</span>
-            <img class="bitcoin-wordmark" src="/Split-images/bitcoin-token.png" alt="Bitcoin" />
-            <span>events</span>
-          </span>
-        </h1>
-
-        <p class="section-subtext">
-          Attend Bitcoin events and connect with your Bitcoin community.
-          <a class="events-pill-link" href="/bitcoin-events" aria-label="View Bitcoin events">
-            <img src="/Split-images/bitcoin-token.png" alt="" aria-hidden="true" />
-            <span>Events</span>
-          </a>
-        </p>
-      </div>
-
-      <div class="section-media" aria-hidden="true">
-        <div class="phone-frame phone-frame--events">
-          <img src="/Split-images/split-events-screen.png" alt="" />
         </div>
       </div>
     </section>
@@ -280,7 +230,7 @@
       window.location.href = targetUrl;
     }));
 
-    const themedSections = document.querySelectorAll("[data-theme]");
+    const themedSections = Array.from(document.querySelectorAll("[data-theme]"));
     const body = document.body;
     const rewardsModal = document.querySelector("[data-home-rewards-modal]");
     const rewardsModalOpen = document.querySelector("[data-home-rewards-modal-open]");
@@ -311,21 +261,31 @@
       }
     });
 
-    if ("IntersectionObserver" in window && themedSections.length > 0) {
-      const themeObserver = new IntersectionObserver((entries) => {
-        const visibleEntry = entries
-          .filter((entry) => entry.isIntersecting)
-          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+    if (themedSections.length > 0) {
+      let themeFrame = null;
 
-        if (visibleEntry?.target?.dataset.theme) {
-          body.dataset.pageTheme = visibleEntry.target.dataset.theme;
+      function updatePageTheme() {
+        themeFrame = null;
+        const viewportAnchor = window.innerHeight * 0.46;
+        const activeSection = themedSections.find((section) => {
+          const rect = section.getBoundingClientRect();
+          return rect.top <= viewportAnchor && rect.bottom > viewportAnchor;
+        }) || themedSections[0];
+        const nextTheme = activeSection.dataset.theme;
+
+        if (nextTheme && body.dataset.pageTheme !== nextTheme) {
+          body.dataset.pageTheme = nextTheme;
         }
-      }, {
-        rootMargin: "-34% 0px -44% 0px",
-        threshold: [0, 0.5, 1],
-      });
+      }
 
-      themedSections.forEach((section) => themeObserver.observe(section));
+      function scheduleThemeUpdate() {
+        if (themeFrame !== null) return;
+        themeFrame = window.requestAnimationFrame(updatePageTheme);
+      }
+
+      updatePageTheme();
+      window.addEventListener("scroll", scheduleThemeUpdate, { passive: true });
+      window.addEventListener("resize", scheduleThemeUpdate);
     }
   </script>
 </body>

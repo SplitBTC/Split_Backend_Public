@@ -69,6 +69,39 @@ test('GET / renders the Home page', async (t) => {
   });
 });
 
+test('GET /android-apk renders the Android APK download page', async (t) => {
+  await maybeWithServer(t, async ({ baseUrl }) => {
+    const response = await fetch(`${baseUrl}/android-apk`);
+    const body = await response.text();
+
+    assert.equal(response.status, 200);
+    assert.match(body, /<title>Split \| Android APK<\/title>/);
+    assert.match(body, /Download the Split APK/);
+  });
+});
+
+test('GET /download redirects Android fallback traffic to Home', async (t) => {
+  await maybeWithServer(t, async ({ baseUrl }) => {
+    const response = await fetch(`${baseUrl}/download`, {
+      redirect: 'manual',
+    });
+
+    assert.equal(response.status, 302);
+    assert.equal(response.headers.get('location'), '/Home');
+  });
+});
+
+test('GET /split-promos renders the Split Promos landing page', async (t) => {
+  await maybeWithServer(t, async ({ baseUrl }) => {
+    const response = await fetch(`${baseUrl}/split-promos`);
+    const body = await response.text();
+
+    assert.equal(response.status, 200);
+    assert.match(body, /<title>Split Promos \| Campaigns for Bitcoin Customers<\/title>/);
+    assert.match(body, /Request a Campaign Call/);
+  });
+});
+
 test('GET /bitcoin-tax is not hosted by this backend', async (t) => {
   await maybeWithServer(t, async ({ baseUrl }) => {
     const response = await fetch(`${baseUrl}/bitcoin-tax`);

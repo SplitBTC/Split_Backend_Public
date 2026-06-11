@@ -1,121 +1,105 @@
-# Split Backend Public AGENTS.md
+# Split Backend AGENTS.md
 
 ## Optional Internal Context
 
-- Internal Split agents with access to the full project folder may also review `PROJECT_MAP_INTERNAL.md` at the project root for cross-repo context.
-- External or public-only review agents should ignore that file. This repo's `AGENTS.md` is the complete repo-local guidance.
+- Internal Split agents with access to the full project folder should also review `PROJECT_MAP_INTERNAL.md` at the project root for cross-repo context.
+- That file is supplemental only. This repo's `AGENTS.md` must remain sufficient on its own.
 
 ## Repo Role
 
-This is the public backend repository for Split.
+This repo is the center of the Split project.
 
-- It exists for inspection, transparency, and community scrutiny.
-- It is not the primary day-to-day development repo.
-- It may intentionally lag behind the private `Split` backend repo.
-- It should represent a public-safe snapshot of production-ready backend code when the user chooses to sync it.
-
-## Intended Consumers
-
-This file is for both implementation agents and review agents.
-
-- Use it to understand what this repo is for before proposing changes or filing review findings.
-- Do not treat this repo like the private source-of-truth backend repo unless explicitly instructed.
+- It is the backend server for the live iOS app in `Split Rewards`.
+- It also supports the Android app in `Split Android`.
+- It owns API compatibility, wallet-authenticated sessions, messaging, rewards, merchant reporting, and hosted Split pages.
 
 ## System Relationships
 
-- Private backend development happens in `Split`.
-- This repo is a public publication target for backend code that is ready to be exposed.
-- It should stay focused on the mobile app platform backend surface and the hosted Split pages that are part of the current backend snapshot, not unrelated private operations or separate applications.
-- `Split Rewards Public` plays the same role for the iOS app.
-- A public Android repo is planned later and should follow the same model.
+- `Split` is the backend source of truth.
+- `Split Rewards` is the primary live client and the first place new product work lands.
+- `Split Android` should be kept behaviorally aligned with iOS, but can use Android-native implementation details.
+- Backend changes must be evaluated against both mobile clients, not just the repo currently being edited.
 
 ## Non-Negotiable Rules
 
-- This repo must always be open-source ready.
-- Do not assume this repo should always mirror the private backend repo.
-- Only sync code here when the user wants the public repo updated to a production-ready snapshot.
-- Treat every push to `main` as an immediate public release.
-- There is no dev branch safety net here. If a change is not ready for public exposure, it does not belong in this repo.
-- This repo is not primarily for outside contributions. Its main purpose is transparency, inspection, and scrutiny.
+- Never make a breaking mobile API change in place if released clients depend on the old behavior.
+- When an API contract must change, create a new version or a new endpoint and keep the old one working until the new client versions are shipped and users are forced to update.
+- Only remove old endpoints after the replacement app versions are live and the old client path is no longer needed.
+- Treat auth, messaging, rewards, and profile routes as shared mobile contracts.
+- Do not assume `routes/iOSEndPoints.js` is iOS-only in practice. The filename is legacy; the backend serves both mobile apps.
 
-## Review Posture
+## Deployment And Release Flow
 
-If you are reviewing this repo:
+User-provided project rule:
 
-- Judge it as a public publication target, not as the main active development repo.
-- Do not assume that a difference from the private backend repo is automatically a bug.
-- Do flag anything that weakens public transparency, public safety, or the coherence of the published snapshot.
-- Prioritize findings around secrets, internal-only material, misleading docs, broken public-safe config, or a snapshot that is obviously incomplete or inconsistent.
-- Treat "this repo is behind private development" as expected unless the user says the public mirror should already include newer work.
+- Pushing the backend `dev` branch to GitHub deploys the Render dev server.
+- Pushing or merging from `dev` to `main` deploys the Render production server.
 
-## Public Release Rules
+When changing backend behavior:
 
-- Before publishing here, check for secrets, internal-only notes, private support docs, credentials, and staging-only material.
-- Keep `.env`, production secrets, private keys, internal incident notes, and unpublished operational details out of this repo.
-- Prefer public-safe defaults and examples over internal real-world config.
-- Exclude private admin tooling, unpublished operational pages, internal support material, and separate applications unless the user explicitly wants them published here.
-- Make sure README and public docs accurately describe the repo’s public role and limitations.
-
-## Private-To-Public Sync Workflow
-
-- Treat the private `Split` repo as the implementation source and this repo as a sanitized publication mirror.
-- Do not do a blind file-for-file mirror from private to public.
-- Sync newer production-ready code, tests, and architecture changes from private only after a publication sweep.
-- Preserve the public repo's sanitization layer when it already exists.
-
-When updating this public repo from private:
-
-- keep public-facing README, AGENTS, and publication-oriented docs as the base versions
-- update those docs only as needed to reflect new code or changed behavior
-- keep public-safe config examples and placeholders instead of replacing them with internal real values
-- remove or replace brand-specific defaults when they are not needed for public transparency
-- exclude private operational notes, staging-only material, local-only config, unpublished support context, and unrelated website-only assets or templates
-
-Default review stance during a sync:
-
-- implementation changes should usually come from private
-- sanitization, placeholder config, and public positioning should usually stay from public
-- if the private version would weaken public safety or reveal internal setup, re-apply the public version or adapt the change before publishing
+- consider dev/prod rollout impact
+- preserve compatibility for already-released mobile builds
+- avoid deleting legacy behavior until the mobile rollout plan is complete
 
 ## Current Repo Shape
 
-- `app.js`: Express app wiring
-- `server.js`: runtime bootstrap
-- `routes/`: backend API routes
-- `models/`: Mongo models
-- `messaging/`: push delivery and directory logic
-- `auth/`: wallet-auth nonce and signature verification helpers
-- `integrations/`: infrastructure integrations
-- `rewards/`: reward logic helpers
-- `merchant/`: merchant wallet-auth helpers
-- `services/`: integrations and background job helpers
-- `views/`: hosted page templates included in the public backend snapshot
-- `tests/`: backend tests
-- `.env.example`: public-safe configuration surface
+- `app.js`: Express app wiring and route mounting
+- `server.js`: HTTP bootstrap, Mongo connection, ngrok dev support, messaging relay cleanup startup
+- `routes/`: route modules for core APIs and hosted pages
+- `models/`: Mongo/Mongoose models
+- `messaging/`: APNs/FCM silent push, directory logic, relay cleanup
+- `auth/sessionHelper.js`: wallet auth nonce issuance and Breez signature verification
+- `middlewares/userAuthMiddleware.js`: JWT-cookie session enforcement
+- `integrations/r2.js`: object storage integration
+- `rewards/`: reward calculation helpers
+- `tests/`: backend test suite
+
+## Key Mobile Contracts In This Repo
+
+Important current backend surfaces include:
+
+- version gate: `/rewards-version-check`
+- wallet auth: `/auth/nonce`, `/auth/wallet-login`, `/session`
+- Breez bootstrap: `/breez-api-key`
+- profile media: `/Profile_Pic`, `/Upload_Profile_Pic`
+- rewards: `/v1/RewardStats`
+- merchant reporting: `/ReportMerchantPubkey`
+- messaging: `/messaging/v4/*` for identity, lookup, send, inbox, ack, outgoing statuses, device registrations, blocks, and attachments
+- Android update fallback: `/download`
 
 ## Working Rules For Future Changes
 
-- If a backend change exists only privately and is not ready for public scrutiny, leave it out of this repo.
-- If syncing from `Split`, do a publication sweep before pushing:
-- remove or avoid secrets
-- remove internal-only material
-- verify docs and examples are public-safe
-- verify the code reflects a coherent production-ready snapshot
-- preserve the public repo's sanitized README/docs/config posture unless the user explicitly wants that changed
-- Keep public-safe examples in `.env.example`.
-- Keep tests and docs healthy enough that outside inspection is meaningful.
-- Preserve the backend API versioning philosophy here too: do not present reckless breaking changes as if they were production-safe.
-- If asked to review or update this repo, optimize for public clarity and publication readiness, not internal development speed.
+- Before changing any request or response shape, check both iOS and Android callers.
+- Prefer additive migrations over hidden behavior swaps.
+- Keep route versioning explicit and easy to reason about.
+- If a new endpoint replaces an old one, document which clients should use which path.
+- When touching shared contracts, update or add backend tests.
+- If a change alters required env/config, update `.env.example` and relevant docs.
+- Do not commit secrets, private support notes, production credentials, or local-only config.
 
 ## Testing And Verification
 
-- Main verification command: `npm test`
-- GitHub Actions exists for backend tests
-- Prefer checks that support public confidence: tests passing, docs accurate, config sanitized
+- Primary test command: `npm test`
+- CI exists in `.github/workflows/backend-tests.yml`
+- Node.js 22 is the expected runtime
+
+When verifying backend work, prioritize:
+
+- route smoke coverage
+- auth/session compatibility
+- mobile contract compatibility
+- messaging regression risk
+
+## Useful Entry Points
+
+- `routes/iOSEndPoints.js`
+- `routes/MessageEndPoints.js`
+- `models/User.js`
+- `auth/sessionHelper.js`
+- `middlewares/userAuthMiddleware.js`
 
 ## Coordination Notes
 
-- Active feature work usually starts in the private `Split` repo.
-- This repo should be updated when the user decides the public backend snapshot should move forward.
-- Never treat this repo like a staging branch.
-- If unsure whether something is public-safe, stop and confirm before publishing.
+- New features normally start in backend + iOS.
+- Android usually follows after the iOS/backend version is stable and production ready.
+- If a task would require deleting or breaking a live endpoint, stop and confirm the rollout plan first.

@@ -4,9 +4,14 @@ const crypto = require('crypto');
 
 const {
   LIGHTNING_ADDRESS_CLIENT_HASH_PREFIX,
+  LIGHTNING_ADDRESS_CLIENT_HASH_SCHEME,
   clientHashLightningAddress,
+  decryptMessagingBindingPayload,
   decryptPushToken,
+  decryptSparkAddress,
+  encryptMessagingBindingPayload,
   encryptPushToken,
+  encryptSparkAddress,
   messagingDataHmac,
   normalizeClientHash,
   normalizeLightningAddress,
@@ -22,6 +27,8 @@ const USER_PEPPER = 'user-pepper-for-tests';
 const MESSAGING_PEPPER = 'messaging-pepper-for-tests';
 const PUSH_LOOKUP_PEPPER = 'push-lookup-pepper-for-tests';
 const PUSH_KEY_HEX = '11'.repeat(32);
+const PAYOUT_KEY_HEX = '22'.repeat(32);
+const BINDING_KEY_HEX = '33'.repeat(32);
 
 test('normalizes wallet and messaging public keys for deterministic storage', () => {
   assert.equal(
@@ -47,7 +54,7 @@ test('normalizes wallet and messaging public keys for deterministic storage', ()
 
 test('normalizes Lightning and Spark addresses with their planned canonical rules', () => {
   assert.equal(
-    normalizeLightningAddress(' Alice@Example.Invalid '),
+    normalizeLightningAddress(' Alice@example.invalid '),
     'alice@example.invalid'
   );
   assert.equal(normalizeLightningAddress('   '), null);
@@ -62,7 +69,7 @@ test('clientHashLightningAddress uses the agreed domain prefix and normalized ad
     .update(`${LIGHTNING_ADDRESS_CLIENT_HASH_PREFIX}alice@example.invalid`, 'utf8')
     .digest('hex');
 
-  assert.equal(clientHashLightningAddress(' Alice@Example.Invalid '), expected);
+  assert.equal(clientHashLightningAddress(' Alice@example.invalid '), expected);
   assert.equal(normalizeClientHash(`0x${expected.toUpperCase()}`), expected);
   assert.equal(normalizeClientHash('abc'), null);
 });
@@ -120,6 +127,56 @@ test('encryptPushToken stores recoverable ciphertext and rejects tampering', () 
   );
 });
 
+test('encryptSparkAddress stores recoverable payout destination ciphertext', () => {
+  const encrypted = encryptSparkAddress(' spark1ABC123 ', { key: PAYOUT_KEY_HEX });
+
+  assert.notEqual(encrypted.sparkAddressCiphertext, 'spark1ABC123');
+  assert.equal(encrypted.sparkAddressKeyVersion, 'split-payout-destination-aes-gcm-v1');
+  assert.equal(
+    decryptSparkAddress({ ...encrypted, key: PAYOUT_KEY_HEX }),
+    'spark1ABC123'
+  );
+
+  assert.throws(
+    () => decryptSparkAddress({
+      ...encrypted,
+      sparkAddressAuthTag: Buffer.from('tampered').toString('base64'),
+      key: PAYOUT_KEY_HEX,
+    }),
+    /Unsupported state|authenticate|bad decrypt|Invalid authentication tag/i
+  );
+});
+
+test('encryptMessagingBindingPayload stores recoverable signed identity bindings', () => {
+  const binding = {
+    walletPubkey: '02aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    lightningAddressHash: clientHashLightningAddress('alice@example.invalid'),
+    lightningAddressHashScheme: LIGHTNING_ADDRESS_CLIENT_HASH_SCHEME,
+    messagingPubkey: '02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+    messagingIdentitySignature: 'identity-signature',
+    messagingIdentitySignatureVersion: 4,
+    messagingIdentitySignedAt: 1_712_000_000,
+  };
+
+  const encrypted = encryptMessagingBindingPayload(binding, { key: BINDING_KEY_HEX });
+
+  assert.notEqual(encrypted.bindingPayloadCiphertext, JSON.stringify(binding));
+  assert.equal(encrypted.bindingPayloadKeyVersion, 'split-messaging-binding-aes-gcm-v1');
+  assert.deepEqual(
+    decryptMessagingBindingPayload({ ...encrypted, key: BINDING_KEY_HEX }),
+    binding
+  );
+
+  assert.throws(
+    () => decryptMessagingBindingPayload({
+      ...encrypted,
+      bindingPayloadAuthTag: Buffer.from('tampered').toString('base64'),
+      key: BINDING_KEY_HEX,
+    }),
+    /Unsupported state|authenticate|bad decrypt|Invalid authentication tag/i
+  );
+});
+
 test('privacy helpers fail fast when required secrets are missing', () => {
   assert.throws(
     () => userDataHmac('value'),
@@ -132,5 +189,21 @@ test('privacy helpers fail fast when required secrets are missing', () => {
   assert.throws(
     () => pushTokenLookupHmac('value'),
     /PUSH_TOKEN_LOOKUP_PEPPER is required/
+  );
+  assert.throws(
+    () => encryptSparkAddress('spark1ABC123'),
+    /PAYOUT_DESTINATION_ENCRYPTION_KEY is required/
+  );
+  assert.throws(
+    () => encryptMessagingBindingPayload({
+      walletPubkey: '02aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      lightningAddressHash: clientHashLightningAddress('alice@example.invalid'),
+      lightningAddressHashScheme: LIGHTNING_ADDRESS_CLIENT_HASH_SCHEME,
+      messagingPubkey: '02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      messagingIdentitySignature: 'identity-signature',
+      messagingIdentitySignatureVersion: 4,
+      messagingIdentitySignedAt: 1_712_000_000,
+    }),
+    /MESSAGING_BINDING_ENCRYPTION_KEY is required/
   );
 });

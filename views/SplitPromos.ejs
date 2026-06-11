@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <title>Split Promos | Campaigns for Bitcoin Customers</title>
+  <meta
+    name="description"
+    content="Split Promos helps brands launch limited campaigns that Bitcoin customers can discover and buy through Split using Lightning payments."
+  />
+  <link rel="stylesheet" href="/css/SplitPromos.css" type="text/css" />
+</head>
+
+<body>
+  <header class="site-header" aria-label="Split Promos header">
+    <a class="brand" href="/Home" aria-label="Split home">
+      <img src="/Split-images/split-logo-black-white-tile.png" alt="Split" />
+      <span>Split</span>
+    </a>
+
+    <nav class="nav-actions" aria-label="Primary">
+      <a href="#model">Model</a>
+      <a href="#launch">Launch Partners</a>
+      <a class="nav-button" href="#apply">Pitch a Campaign</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <p class="eyebrow">Split Promos</p>
+        <h1 id="hero-title">Launch limited offers directly to Bitcoin customers.</h1>
+        <p class="hero-lede">
+          Split Promos is a campaign marketplace where brands sell limited-time offers, exclusive drops, and Bitcoin only deals to Split users.
+        </p>
+        <div class="hero-actions">
+          <a class="button button-primary" href="#apply">Become a Launch Partner</a>
+          <a class="button button-secondary" href="mailto:support@example.com?subject=Split%20Promos%20launch%20partner">Email Split</a>
+        </div>
+      </div>
+
+      <div class="hero-product" aria-label="Split app promos preview">
+        <div class="phone-shell">
+          <img src="/Split-images/split-promos-campaign-screen.png" alt="Split app promos campaign example screen" />
+        </div>
+        <div class="campaign-ticket" aria-hidden="true">
+          <span>Example drop</span>
+          <strong>48-hour Bitcoin-only offer</strong>
+          <small>Featured placement in Split</small>
+        </div>
+      </div>
+    </section>
+
+    <section class="proof-band" aria-label="Campaign model summary">
+      <article>
+        <span>Built for urgency</span>
+        <strong>Quantity or time limited</strong>
+        <p>Run a one hour drop, a weekend launch, or a month long campaign.</p>
+      </article>
+      <article>
+        <span>Measured by sales</span>
+        <strong>Purchases, not impressions</strong>
+        <p>Campaigns are judged by products sold and customers acquired.</p>
+      </article>
+    </section>
+
+    <section class="section split-layout" id="model" aria-labelledby="model-title">
+      <div>
+        <p class="eyebrow">How It Works</p>
+        <h2 id="model-title">A cleaner acquisition channel for brands that want Bitcoin customers.</h2>
+      </div>
+      <div class="steps">
+        <article>
+          <span>01</span>
+          <h3>Create a campaign</h3>
+          <p>Promos can include product discounts, exclusive products, limited inventory releases, gift cards, digital products, or Bitcoin-only offers.</p>
+        </article>
+        <article>
+          <span>02</span>
+          <h3>Sell through Split</h3>
+          <p>Users discover the campaign in Split and purchase through the app using Lightning payments.</p>
+        </article>
+        <article>
+          <span>03</span>
+          <h3>Settle after the promo</h3>
+          <p>Split processes payments, collects order details, and settles campaign proceeds with participating brands after the promotion concludes.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section partner-section" id="launch" aria-labelledby="launch-title">
+      <div class="partner-copy">
+        <p class="eyebrow">Launch Partner Program</p>
+        <h2 id="launch-title">We are starting with a small group of strong brand partners.</h2>
+        <p>
+          Split is looking for Bitcoin companies, ecommerce brands, gift card providers, consumer products with nationwide fulfillment, and digital products or services.
+        </p>
+      </div>
+
+      <div class="support-grid">
+        <article>
+          <h3>Featured app placement</h3>
+          <p>Launch campaigns appear in the Promos section of Split, where users can buy directly from the campaign.</p>
+        </article>
+        <article>
+          <h3>Campaign creative</h3>
+          <p>We help shape the offer, creative, and launch story so the campaign feels native to Bitcoin users.</p>
+        </article>
+        <article>
+          <h3>Pre-launch demand</h3>
+          <p>Split can support launch partners with paid ads, social promotion, creator partnerships, and pre-launch awareness.</p>
+        </article>
+        <article>
+          <h3>Case study focus</h3>
+          <p>The goal is to create repeatable campaigns with clear sales, participation, customer acquisition, and partner retention metrics.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section apply-section" id="apply" aria-labelledby="apply-title">
+      <div class="apply-copy">
+        <p class="eyebrow">Pitch a Campaign</p>
+        <h2 id="apply-title">Tell us what you would sell to Bitcoin customers.</h2>
+        <p>
+          Share your brand and the type of offer you want to test. We will follow up to discuss campaign fit, inventory, fulfillment, timing, and launch support.
+        </p>
+      </div>
+
+      <form class="lead-form" action="/prospects" method="POST">
+        <input type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" class="form-honeypot" />
+        <input type="hidden" name="source" value="split-promos" />
+
+        <label>
+          <span>Name</span>
+          <input type="text" name="name" autocomplete="name" required />
+        </label>
+
+        <label>
+          <span>Work email</span>
+          <input type="email" name="email" autocomplete="email" required />
+        </label>
+
+        <label>
+          <span>Brand or business</span>
+          <input type="text" name="businessName" autocomplete="organization" required />
+        </label>
+
+        <label>
+          <span>Campaign idea</span>
+          <textarea name="campaignGoal" rows="4" placeholder="Limited drop, discount, gift card offer, digital product, Bitcoin-only launch..."></textarea>
+        </label>
+
+        <button class="button button-primary" type="submit">Request a Campaign Call</button>
+      </form>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span>© <span id="year"></span> Split.</span>
+    <div>
+      <a href="/Privacy-policy">Privacy Policy</a>
+      <a href="/User-agreement">User Agreement</a>
+    </div>
+  </footer>
+
+  <script>
+    document.getElementById('year').textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>

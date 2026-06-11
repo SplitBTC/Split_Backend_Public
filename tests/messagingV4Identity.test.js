@@ -10,14 +10,18 @@ const {
   MESSAGING_IDENTITY_V4_DOMAIN,
   MESSAGING_IDENTITY_V4_SIGNATURE_VERSION,
   bindingMatchesStoredRecord,
+  buildEncryptedMessagingBindingStorageFields,
   buildMessagingAccountHmacs,
+  buildMessagingBindingPayloadHmac,
   buildMessagingIdentityV4Message,
   buildMessagingPubkeyHmac,
+  materializeMessagingBindingV4,
   normalizeAndValidateMessagingIdentityV4,
   stripMessagingBindingV4,
 } = require('../services/messagingV4Identity');
 
 const MESSAGING_PEPPER = 'messaging-v4-identity-test-pepper';
+const BINDING_KEY_HEX = '44'.repeat(32);
 
 function buildPayload(overrides = {}) {
   return {
@@ -58,7 +62,7 @@ signedAt=1712000000`
 test('normalizeAndValidateMessagingIdentityV4 accepts normalized v4 bindings', () => {
   const normalized = normalizeAndValidateMessagingIdentityV4(buildPayload({
     walletPubkey: ' 02AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA ',
-    lightningAddressHash: `0x${clientHashLightningAddress('Alice@Example.Invalid').toUpperCase()}`,
+    lightningAddressHash: `0x${clientHashLightningAddress('Alice@example.invalid').toUpperCase()}`,
     messagingPubkey: ' 02BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB ',
     messagingIdentitySignatureVersion: '4',
     messagingIdentitySignedAt: '1712000000',
@@ -131,6 +135,62 @@ test('bindingMatchesStoredRecord and stripMessagingBindingV4 handle stored date 
     messagingIdentitySignedAt: 1_712_000_000,
     messagingIdentityUpdatedAt: stored.updatedAt,
   });
+});
+
+test('encrypted messaging binding storage materializes raw client payloads without storing raw indexed fields', () => {
+  const originalBindingKey = process.env.MESSAGING_BINDING_ENCRYPTION_KEY;
+  process.env.MESSAGING_BINDING_ENCRYPTION_KEY = BINDING_KEY_HEX;
+
+  const { binding } = normalizeAndValidateMessagingIdentityV4(buildPayload());
+  try {
+    const stored = {
+      _id: 'binding-id',
+      messagingAccountId: 'account-id',
+      active: true,
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      ...buildEncryptedMessagingBindingStorageFields(binding, {
+        pepper: MESSAGING_PEPPER,
+      }),
+    };
+
+    assert.notEqual(stored.walletPubkey, binding.walletPubkey);
+    assert.notEqual(stored.lightningAddressHash, binding.lightningAddressHash);
+    assert.notEqual(stored.messagingPubkey, binding.messagingPubkey);
+    assert.notEqual(stored.messagingIdentitySignature, binding.messagingIdentitySignature);
+    assert.equal(
+      stored.bindingPayloadMessagingHmac,
+      buildMessagingBindingPayloadHmac(binding, { pepper: MESSAGING_PEPPER })
+    );
+
+    const materialized = materializeMessagingBindingV4({
+      ...stored,
+      toObject() {
+        return stored;
+      },
+    });
+
+    assert.equal(materialized.bindingPayloadEncrypted, true);
+    assert.equal(materialized.walletPubkey, binding.walletPubkey);
+    assert.equal(materialized.lightningAddressHash, binding.lightningAddressHash);
+    assert.equal(materialized.messagingPubkey, binding.messagingPubkey);
+    assert.equal(bindingMatchesStoredRecord(stored, binding), true);
+    assert.deepEqual(stripMessagingBindingV4(stored), {
+      walletPubkey: binding.walletPubkey,
+      lightningAddressHash: binding.lightningAddressHash,
+      lightningAddressHashScheme: binding.lightningAddressHashScheme,
+      messagingPubkey: binding.messagingPubkey,
+      messagingIdentitySignature: binding.messagingIdentitySignature,
+      messagingIdentitySignatureVersion: 4,
+      messagingIdentitySignedAt: 1_712_000_000,
+      messagingIdentityUpdatedAt: stored.updatedAt,
+    });
+  } finally {
+    if (originalBindingKey == null) {
+      delete process.env.MESSAGING_BINDING_ENCRYPTION_KEY;
+    } else {
+      process.env.MESSAGING_BINDING_ENCRYPTION_KEY = originalBindingKey;
+    }
+  }
 });
 
 test('buildMessagingPubkeyHmac returns a lookup HMAC for valid messaging keys', () => {

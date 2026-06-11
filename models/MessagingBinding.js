@@ -36,6 +36,32 @@ const messagingBindingSchema = new mongoose.Schema(
       index: true,
     },
 
+    bindingPayloadMessagingHmac: {
+      type: String,
+      default: null,
+      index: true,
+    },
+
+    bindingPayloadCiphertext: {
+      type: String,
+      default: null,
+    },
+
+    bindingPayloadIv: {
+      type: String,
+      default: null,
+    },
+
+    bindingPayloadAuthTag: {
+      type: String,
+      default: null,
+    },
+
+    bindingPayloadKeyVersion: {
+      type: String,
+      default: null,
+    },
+
     messagingIdentitySignature: {
       type: String,
       required: true,
@@ -62,6 +88,18 @@ const messagingBindingSchema = new mongoose.Schema(
 );
 
 messagingBindingSchema.index({ messagingAccountId: 1, active: 1, updatedAt: -1 });
+messagingBindingSchema.index(
+  {
+    messagingAccountId: 1,
+    bindingPayloadMessagingHmac: 1,
+  },
+  {
+    unique: true,
+    partialFilterExpression: {
+      bindingPayloadMessagingHmac: { $type: 'string' },
+    },
+  }
+);
 messagingBindingSchema.index(
   {
     messagingAccountId: 1,

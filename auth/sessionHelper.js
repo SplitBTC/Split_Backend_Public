@@ -5,6 +5,8 @@ const secp = require('@noble/secp256k1');
 
 // nonce -> { expiresAt: number, used: boolean, messageToSign: string }
 const walletAuthNonces = new Map();
+const WALLET_AUTH_PURPOSE = 'wallet-auth';
+const ACCOUNT_DELETE_PURPOSE = 'account-delete';
 
 function generateNonce() {
   return crypto.randomBytes(32).toString('hex');
@@ -26,42 +28,72 @@ domain=${domain}
 nonce=${nonce}`;
 }
 
-function issueNonce({ ttlMs = 5 * 60 * 1000, domain = 'example.invalid' } = {}) {
+function buildAccountDeleteMessage({ nonce, domain }) {
+  return `SplitRewards Account Deletion Authorization
+domain=${domain}
+nonce=${nonce}`;
+}
+
+function buildWalletPurposeMessage({ nonce, domain, purpose }) {
+  if (purpose === ACCOUNT_DELETE_PURPOSE) {
+    return buildAccountDeleteMessage({ nonce, domain });
+  }
+
+  return buildWalletAuthMessage({ nonce, domain });
+}
+
+function issueNonce({
+  ttlMs = 5 * 60 * 1000,
+  domain = 'example.invalid',
+  purpose = WALLET_AUTH_PURPOSE,
+} = {}) {
   pruneNonces();
 
   const nonce = generateNonce();
   const expiresAtMs = Date.now() + ttlMs;
 
-  const messageToSign = buildWalletAuthMessage({ nonce, domain });
+  const normalizedPurpose = purpose === ACCOUNT_DELETE_PURPOSE
+    ? ACCOUNT_DELETE_PURPOSE
+    : WALLET_AUTH_PURPOSE;
+  const messageToSign = buildWalletPurposeMessage({
+    nonce,
+    domain,
+    purpose: normalizedPurpose,
+  });
 
   walletAuthNonces.set(nonce, {
     expiresAt: expiresAtMs,
     used: false,
     messageToSign,
+    purpose: normalizedPurpose,
   });
 
   return {
     nonce,
     expiresAt: new Date(expiresAtMs).toISOString(),
     messageToSign,
+    purpose: normalizedPurpose,
   };
 }
 
-function peekNonce(nonce) {
+function peekNonce(nonce, { purpose = null } = {}) {
   pruneNonces();
   const entry = walletAuthNonces.get(nonce);
   if (!entry || entry.used || entry.expiresAt <= Date.now()) return null;
+  if (purpose && (entry.purpose || WALLET_AUTH_PURPOSE) !== purpose) return null;
 
   return {
     messageToSign: entry.messageToSign,
     expiresAt: new Date(entry.expiresAt).toISOString(),
+    purpose: entry.purpose || WALLET_AUTH_PURPOSE,
   };
 }
 
-function consumeNonce(nonce) {
+function consumeNonce(nonce, { purpose = null } = {}) {
   pruneNonces();
   const entry = walletAuthNonces.get(nonce);
   if (!entry || entry.used || entry.expiresAt <= Date.now()) return false;
+  if (purpose && (entry.purpose || WALLET_AUTH_PURPOSE) !== purpose) return false;
 
   entry.used = true;
   walletAuthNonces.set(nonce, entry);
@@ -163,6 +195,10 @@ function verifyBreezSignedMessage({ message, pubkey, signature }) {
 }
 
 module.exports = {
+  ACCOUNT_DELETE_PURPOSE,
+  WALLET_AUTH_PURPOSE,
+  buildAccountDeleteMessage,
+  buildWalletAuthMessage,
   issueNonce,
   peekNonce,
   consumeNonce,

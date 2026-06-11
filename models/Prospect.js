@@ -5,6 +5,8 @@ const prospectSchema = new mongoose.Schema({
   businessName: { type: String, required: true, },
   email: { type: String, required: true, },
   name: { type: String, required: true, },
+  source: { type: String },
+  campaignGoal: { type: String },
 
 });
 

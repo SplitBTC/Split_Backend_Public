@@ -22,11 +22,8 @@ const userAuthMiddleware = (req, res, next) => {
       return res.status(401).json({ error: 'Unauthorized - Invalid token' });
     }
 
-    // Attach userId (+ optional pubkey) to the request object
+    // Attach only the stable user id. Legacy cookies may still include pubkey until expiry.
     req.userId = userId;
-    if (decoded.pubkey) {
-      req.pubkey = decoded.pubkey;
-    }
 
     // Proceed to the next middleware or route handler
     next();

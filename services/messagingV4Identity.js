@@ -1,5 +1,8 @@
 const {
+  decryptMessagingBindingPayload,
+  encryptMessagingBindingPayload,
   LIGHTNING_ADDRESS_CLIENT_HASH_SCHEME,
+  MESSAGING_BINDING_KEY_VERSION,
   MESSAGING_HMAC_VERSION,
   messagingDataHmac,
   normalizeClientHash,
@@ -9,7 +12,7 @@ const {
 
 const MESSAGING_IDENTITY_V4_SIGNATURE_VERSION = 4;
 const MESSAGING_IDENTITY_V4_DOMAIN = process.env.MESSAGING_V4_IDENTITY_DOMAIN ||
-  'splitrewards.messaging';
+  'example.messaging';
 
 function parseIntegerValue(value) {
   if (Number.isInteger(value)) return value;
@@ -122,8 +125,62 @@ function buildMessagingPubkeyHmac(messagingPubkey, options = {}) {
     : null;
 }
 
+function canonicalMessagingBindingPayload(binding = {}) {
+  const signedAt = bindingSignedAtSeconds(
+    binding.messagingIdentitySignedAtDate || binding.messagingIdentitySignedAt
+  );
+  if (!Number.isInteger(signedAt) || signedAt <= 0) {
+    throw new Error('binding.messagingIdentitySignedAt is required or invalid');
+  }
+
+  return {
+    walletPubkey: binding.walletPubkey,
+    lightningAddressHash: binding.lightningAddressHash,
+    lightningAddressHashScheme: binding.lightningAddressHashScheme,
+    messagingPubkey: binding.messagingPubkey,
+    messagingIdentitySignature: binding.messagingIdentitySignature,
+    messagingIdentitySignatureVersion: binding.messagingIdentitySignatureVersion,
+    messagingIdentitySignedAt: signedAt,
+  };
+}
+
+function buildMessagingBindingPayloadHmac(binding, options = {}) {
+  return messagingDataHmac(
+    JSON.stringify(canonicalMessagingBindingPayload(binding)),
+    options
+  );
+}
+
+function buildEncryptedMessagingBindingStorageFields(binding, options = {}) {
+  const canonicalBinding = canonicalMessagingBindingPayload(binding);
+  const hmacs = buildMessagingAccountHmacs(canonicalBinding, options);
+  const messagingPubkeyMessagingHmac = buildMessagingPubkeyHmac(
+    canonicalBinding.messagingPubkey,
+    options
+  );
+  const bindingPayloadMessagingHmac = buildMessagingBindingPayloadHmac(canonicalBinding, options);
+
+  return {
+    // Deprecated raw-field names are populated with deterministic HMACs so old
+    // compound indexes remain satisfied without storing raw binding material.
+    walletPubkey: hmacs.walletPubkeyMessagingHmac,
+    lightningAddressHash: hmacs.lightningAddressMessagingHmac,
+    lightningAddressHashScheme: canonicalBinding.lightningAddressHashScheme,
+    messagingPubkey: messagingPubkeyMessagingHmac,
+    messagingIdentitySignature: bindingPayloadMessagingHmac,
+    messagingIdentitySignatureVersion: canonicalBinding.messagingIdentitySignatureVersion,
+    messagingIdentitySignedAt: new Date(canonicalBinding.messagingIdentitySignedAt * 1000),
+    messagingPubkeyMessagingHmac,
+    bindingPayloadMessagingHmac,
+    ...encryptMessagingBindingPayload(canonicalBinding, options),
+  };
+}
+
 function bindingSignedAtSeconds(value) {
   if (!value) return null;
+
+  const parsedInteger = parseIntegerValue(value);
+  if (parsedInteger != null) return parsedInteger;
 
   if (value instanceof Date) {
     return Math.floor(value.getTime() / 1000);
@@ -133,40 +190,90 @@ function bindingSignedAtSeconds(value) {
   return Number.isNaN(parsed) ? null : Math.floor(parsed / 1000);
 }
 
+function hasEncryptedMessagingBindingPayload(bindingRecord) {
+  return !!(
+    bindingRecord?.bindingPayloadCiphertext &&
+    bindingRecord?.bindingPayloadIv &&
+    bindingRecord?.bindingPayloadAuthTag
+  );
+}
+
+function materializeMessagingBindingV4(bindingRecord) {
+  if (!bindingRecord) return null;
+
+  const source = typeof bindingRecord.toObject === 'function'
+    ? bindingRecord.toObject()
+    : bindingRecord;
+  const isEncrypted = hasEncryptedMessagingBindingPayload(source);
+  let decryptedBinding = null;
+  try {
+    decryptedBinding = isEncrypted
+      ? decryptMessagingBindingPayload(source)
+      : canonicalMessagingBindingPayload(source);
+  } catch (error) {
+    if (isEncrypted) {
+      throw error;
+    }
+
+    return {
+      ...source,
+      bindingPayloadKeyVersion: source.bindingPayloadKeyVersion || null,
+      bindingPayloadEncrypted: false,
+    };
+  }
+
+  return {
+    ...source,
+    ...decryptedBinding,
+    messagingIdentitySignedAt: new Date(decryptedBinding.messagingIdentitySignedAt * 1000),
+    messagingIdentitySignedAtSeconds: decryptedBinding.messagingIdentitySignedAt,
+    bindingPayloadKeyVersion: source.bindingPayloadKeyVersion || null,
+    bindingPayloadEncrypted: isEncrypted,
+  };
+}
+
 function bindingMatchesStoredRecord(bindingRecord, binding) {
+  const materializedBinding = materializeMessagingBindingV4(bindingRecord);
+  if (!materializedBinding) return false;
+
   return (
-    String(bindingRecord.walletPubkey || '') === binding.walletPubkey &&
-    String(bindingRecord.lightningAddressHash || '') === binding.lightningAddressHash &&
-    String(bindingRecord.lightningAddressHashScheme || '') === binding.lightningAddressHashScheme &&
-    String(bindingRecord.messagingPubkey || '') === binding.messagingPubkey &&
-    String(bindingRecord.messagingIdentitySignature || '') === binding.messagingIdentitySignature &&
-    Number(bindingRecord.messagingIdentitySignatureVersion) === binding.messagingIdentitySignatureVersion &&
-    bindingSignedAtSeconds(bindingRecord.messagingIdentitySignedAt) === binding.messagingIdentitySignedAt
+    String(materializedBinding.walletPubkey || '') === binding.walletPubkey &&
+    String(materializedBinding.lightningAddressHash || '') === binding.lightningAddressHash &&
+    String(materializedBinding.lightningAddressHashScheme || '') === binding.lightningAddressHashScheme &&
+    String(materializedBinding.messagingPubkey || '') === binding.messagingPubkey &&
+    String(materializedBinding.messagingIdentitySignature || '') === binding.messagingIdentitySignature &&
+    Number(materializedBinding.messagingIdentitySignatureVersion) === binding.messagingIdentitySignatureVersion &&
+    bindingSignedAtSeconds(materializedBinding.messagingIdentitySignedAt) === binding.messagingIdentitySignedAt
   );
 }
 
 function stripMessagingBindingV4(bindingRecord) {
-  if (!bindingRecord) return null;
+  const materializedBinding = materializeMessagingBindingV4(bindingRecord);
+  if (!materializedBinding) return null;
 
   return {
-    walletPubkey: bindingRecord.walletPubkey,
-    lightningAddressHash: bindingRecord.lightningAddressHash,
-    lightningAddressHashScheme: bindingRecord.lightningAddressHashScheme,
-    messagingPubkey: bindingRecord.messagingPubkey,
-    messagingIdentitySignature: bindingRecord.messagingIdentitySignature,
-    messagingIdentitySignatureVersion: bindingRecord.messagingIdentitySignatureVersion,
-    messagingIdentitySignedAt: bindingSignedAtSeconds(bindingRecord.messagingIdentitySignedAt),
-    messagingIdentityUpdatedAt: bindingRecord.updatedAt || null,
+    walletPubkey: materializedBinding.walletPubkey,
+    lightningAddressHash: materializedBinding.lightningAddressHash,
+    lightningAddressHashScheme: materializedBinding.lightningAddressHashScheme,
+    messagingPubkey: materializedBinding.messagingPubkey,
+    messagingIdentitySignature: materializedBinding.messagingIdentitySignature,
+    messagingIdentitySignatureVersion: materializedBinding.messagingIdentitySignatureVersion,
+    messagingIdentitySignedAt: bindingSignedAtSeconds(materializedBinding.messagingIdentitySignedAt),
+    messagingIdentityUpdatedAt: materializedBinding.updatedAt || null,
   };
 }
 
 module.exports = {
+  MESSAGING_BINDING_KEY_VERSION,
   MESSAGING_IDENTITY_V4_DOMAIN,
   MESSAGING_IDENTITY_V4_SIGNATURE_VERSION,
   bindingMatchesStoredRecord,
+  buildEncryptedMessagingBindingStorageFields,
   buildMessagingAccountHmacs,
+  buildMessagingBindingPayloadHmac,
   buildMessagingIdentityV4Message,
   buildMessagingPubkeyHmac,
+  materializeMessagingBindingV4,
   normalizeAndValidateMessagingIdentityV4,
   stripMessagingBindingV4,
 };

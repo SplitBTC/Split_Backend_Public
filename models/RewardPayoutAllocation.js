@@ -38,6 +38,26 @@ const RewardPayoutAllocationSchema = new mongoose.Schema(
       default: null,
     },
 
+    sparkAddressCiphertext: {
+      type: String,
+      default: null,
+    },
+
+    sparkAddressIv: {
+      type: String,
+      default: null,
+    },
+
+    sparkAddressAuthTag: {
+      type: String,
+      default: null,
+    },
+
+    sparkAddressKeyVersion: {
+      type: String,
+      default: null,
+    },
+
     closed: {
       type: Boolean,
       default: false,

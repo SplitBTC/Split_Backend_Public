@@ -10,9 +10,6 @@ const sharp = require('sharp');
 const { PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const s3Client = require('../integrations/r2');
 const User = require('../models/User');
-const Coupon = require('../models/Coupon');
-const CouponRedemption = require('../models/CouponRedemption');
-const MessagingDeviceRegistration = require('../models/MessagingDeviceRegistration');
 const MessagingAccount = require('../models/MessagingAccount');
 const MessagingBinding = require('../models/MessagingBinding');
 const MessagingDeviceRegistrationV4 = require('../models/MessagingDeviceRegistrationV4');
@@ -24,21 +21,20 @@ const PlatformAnalytics = require('../models/PlatformAnalytics');
 const PlatformWallet = require('../models/PlatformWallet');
 const RewardSpendPayment = require('../models/RewardSpendPayment');
 const RewardPayoutAllocation = require('../models/RewardPayoutAllocation');
-const UserBlock = require('../models/UserBlock');
 const userAuthMiddleware = require('../middlewares/userAuthMiddleware');
-const userRewardSpendFunction = require('../rewards/userRewardSpendFunction');
 const rewardClaimEncryption = require('../rewards/rewardClaimEncryption');
 const { decodeBolt11 } = require('../rewards/bolt11Invoice');
 const { normalizeProof32ByteHex } = require('../rewards/rewardProofEncoding');
 const sessionHelper = require('../auth/sessionHelper');
-const googleMapsAddressValidation = require('../services/googleMapsAddressValidation');
 const {
-  assignUserPrivacyFields,
   buildUserPrivacyFields,
 } = require('../services/userPrivacy');
 const {
+  decryptSparkAddress,
+  encryptSparkAddress,
   messagingDataHmac,
   normalizeWalletPubkey,
+  PAYOUT_DESTINATION_KEY_VERSION,
 } = require('../services/privacyCrypto');
 const breezApiKey = process.env.BREEZ_API_KEY;
 const upload = multer({
@@ -85,21 +81,69 @@ function normalizeHash(value) {
   return typeof value === 'string' ? value.trim().toLowerCase() : '';
 }
 
+function wrapPayoutDestinationPrivacyError(error) {
+  if (/PAYOUT_DESTINATION_ENCRYPTION_KEY/.test(String(error?.message || error))) {
+    const wrappedError = new Error('Payout destination privacy configuration is missing');
+    wrappedError.statusCode = 500;
+    wrappedError.publicMessage = 'Payout destination privacy configuration is missing';
+    throw wrappedError;
+  }
+
+  throw error;
+}
+
+function buildSparkAddressEncryptionFields(sparkAddress) {
+  try {
+    return encryptSparkAddress(sparkAddress);
+  } catch (error) {
+    wrapPayoutDestinationPrivacyError(error);
+  }
+}
+
+function hasSparkAddressEncryptionFields(user) {
+  return Boolean(
+    user?.sparkAddressCiphertext &&
+    user?.sparkAddressIv &&
+    user?.sparkAddressAuthTag &&
+    user?.sparkAddressKeyVersion
+  );
+}
+
+function hasCurrentSparkAddressEncryptionFields(user) {
+  return (
+    hasSparkAddressEncryptionFields(user) &&
+    user.sparkAddressKeyVersion === PAYOUT_DESTINATION_KEY_VERSION
+  );
+}
+
+function decryptStoredSparkAddress(user) {
+  try {
+    return decryptSparkAddress({
+      sparkAddressCiphertext: user.sparkAddressCiphertext,
+      sparkAddressIv: user.sparkAddressIv,
+      sparkAddressAuthTag: user.sparkAddressAuthTag,
+    });
+  } catch (error) {
+    wrapPayoutDestinationPrivacyError(error);
+  }
+}
+
+function resolvePayoutSparkAddressForLogin(user, incomingSparkAddress) {
+  const storedPlaintextSparkAddress =
+    typeof user?.sparkAddress === 'string' ? user.sparkAddress.trim() : '';
+  if (storedPlaintextSparkAddress) {
+    return storedPlaintextSparkAddress;
+  }
+
+  if (hasSparkAddressEncryptionFields(user)) {
+    return decryptStoredSparkAddress(user);
+  }
+
+  return incomingSparkAddress;
+}
+
 function sha256Hex(value) {
   return crypto.createHash('sha256').update(value).digest('hex');
-}
-
-function rewardTraceFingerprint(value) {
-  if (typeof value !== 'string' || value.trim().length === 0) return 'none';
-  return sha256Hex(Buffer.from(value.trim(), 'utf8')).slice(0, 12);
-}
-
-function rewardClaimTrace(event, details = {}) {
-  console.info(
-    '[RewardClaimTrace]',
-    event,
-    JSON.stringify(details)
-  );
 }
 
 function r2ObjectKeyFromPublicUrl(publicUrl) {
@@ -155,8 +199,8 @@ async function deleteObjectFromR2(objectKey, logContext) {
   }
 }
 
-async function deleteMessagingV4AccountDataForUser(user, req) {
-  const walletPubkey = normalizeWalletPubkey(req.pubkey || user.walletPubkey);
+async function deleteMessagingV4AccountDataForWalletPubkey(rawWalletPubkey) {
+  const walletPubkey = normalizeWalletPubkey(rawWalletPubkey);
   if (!walletPubkey) {
     return null;
   }
@@ -246,14 +290,9 @@ async function deleteMessagingV4AccountDataForUser(user, req) {
 }
 
 const rewardsMinimumVersions = Object.freeze({
-  ios: '4.3.1',
-  android: '0.6.1',
+  ios: '4.4.3',
+  android: '0.7.3',
 });
-const MILES_TO_METERS = 1609.344;
-const COUPON_DEFAULT_RADIUS_MILES = 25;
-const COUPON_MAX_RADIUS_MILES = 50;
-const COUPON_DEFAULT_LIMIT = 50;
-const COUPON_MAX_LIMIT = 100;
 
 function getRewardsMinimumVersion(platform) {
   const requestedPlatform = String(platform || '').trim().toLowerCase();
@@ -264,172 +303,6 @@ function getRewardsMinimumVersion(platform) {
   return requestedPlatform === 'android'
     ? rewardsMinimumVersions.android
     : rewardsMinimumVersions.ios;
-}
-
-function parseCoordinate(value) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function parseCouponRadiusMiles(value) {
-  const parsed = Number(value);
-
-  if (!Number.isFinite(parsed)) {
-    return COUPON_DEFAULT_RADIUS_MILES;
-  }
-
-  return Math.max(1, Math.min(COUPON_MAX_RADIUS_MILES, parsed));
-}
-
-function normalizePostalCode(value) {
-  const digits = String(value || '').trim().replace(/[^\d]/g, '');
-
-  if (digits.length === 9) {
-    return `${digits.slice(0, 5)}-${digits.slice(5)}`;
-  }
-
-  if (digits.length === 5) {
-    return digits;
-  }
-
-  return String(value || '').trim();
-}
-
-function getCurrentCouponRedemptionMonth(date = new Date()) {
-  const year = date.getUTCFullYear();
-  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-  return `${year}-${month}`;
-}
-
-function readCookieValue(req, name) {
-  if (req?.cookies && typeof req.cookies[name] === 'string') {
-    return req.cookies[name];
-  }
-
-  const rawCookieHeader = String(req?.headers?.cookie || '');
-  if (!rawCookieHeader) {
-    return null;
-  }
-
-  const cookies = rawCookieHeader.split(';');
-  for (const cookie of cookies) {
-    const trimmedCookie = cookie.trim();
-    if (!trimmedCookie) {
-      continue;
-    }
-
-    const separatorIndex = trimmedCookie.indexOf('=');
-    if (separatorIndex <= 0) {
-      continue;
-    }
-
-    const key = trimmedCookie.slice(0, separatorIndex).trim();
-    if (key !== name) {
-      continue;
-    }
-
-    return decodeURIComponent(trimmedCookie.slice(separatorIndex + 1).trim());
-  }
-
-  return null;
-}
-
-function getOptionalAuthenticatedUserId(req) {
-  const secretKey = getJwtSecretKey();
-  if (!secretKey) {
-    return null;
-  }
-
-  const token = readCookieValue(req, 'jwtToken');
-  if (!token) {
-    return null;
-  }
-
-  try {
-    const decoded = jwt.verify(token, secretKey);
-    return decoded?.userId ? String(decoded.userId) : null;
-  } catch (_error) {
-    return null;
-  }
-}
-
-function isDuplicateKeyError(error) {
-  return !!error && error.code === 11000;
-}
-
-function isMongooseCastError(error) {
-  return error instanceof mongoose.Error.CastError || error?.name === 'CastError';
-}
-
-function buildNearbyCouponPipeline({ latitude, longitude, radiusMiles, limit }) {
-  return [
-    {
-      $geoNear: {
-        near: {
-          type: 'Point',
-          coordinates: [longitude, latitude],
-        },
-        distanceField: 'distanceMeters',
-        maxDistance: radiusMiles * MILES_TO_METERS,
-        query: {
-          status: 'approved',
-        },
-        spherical: true,
-      },
-    },
-    {
-      $sort: {
-        distanceMeters: 1,
-        createdAt: -1,
-      },
-    },
-    {
-      $limit: limit,
-    },
-    {
-      $project: {
-        businessName: 1,
-        businessLogoUrl: 1,
-        dealDescription: 1,
-        appliesToAllLocations: 1,
-        primaryBusinessAddress: 1,
-        distanceMeters: 1,
-      },
-    },
-  ];
-}
-
-function serializePublicCoupon(coupon, options = {}) {
-  const redemption = options.redemption || null;
-  const distanceMeters = Number(coupon?.distanceMeters);
-  const distanceMiles = Number.isFinite(distanceMeters)
-    ? Math.round((distanceMeters / MILES_TO_METERS) * 100) / 100
-    : null;
-
-  return {
-    id: String(coupon?._id || ''),
-    businessName: String(coupon?.businessName || '').trim(),
-    businessLogoUrl: String(coupon?.businessLogoUrl || '').trim() || null,
-    dealDescription: String(coupon?.dealDescription || '').trim(),
-    appliesToAllLocations: !!coupon?.appliesToAllLocations,
-    hasRedeemedThisMonth: !!redemption,
-    currentUserRedeemedAt: redemption?.redeemedAt || null,
-    primaryBusinessAddress: coupon?.primaryBusinessAddress
-      ? {
-          formattedAddress: String(coupon.primaryBusinessAddress.formattedAddress || '').trim(),
-          line1: String(coupon.primaryBusinessAddress.line1 || '').trim(),
-          line2: String(coupon.primaryBusinessAddress.line2 || '').trim(),
-          city: String(coupon.primaryBusinessAddress.city || '').trim(),
-          state: String(coupon.primaryBusinessAddress.state || '').trim(),
-          postalCode: String(coupon.primaryBusinessAddress.postalCode || '').trim(),
-          countryCode: String(coupon.primaryBusinessAddress.countryCode || '').trim(),
-          placeId: String(coupon.primaryBusinessAddress.placeId || '').trim(),
-          latitude: Number(coupon.primaryBusinessAddress.latitude),
-          longitude: Number(coupon.primaryBusinessAddress.longitude),
-        }
-      : null,
-    distanceMiles,
-  };
 }
 
 router.get('/rewards-version-check', async (req, res) => {
@@ -509,173 +382,6 @@ router.get('/v1/reward-merchant-pubkey-hashes', async (req, res) => {
   }
 });
 
-router.get('/v1/merchant-coupons/nearby', async (req, res) => {
-  try {
-    const currentUserId = getOptionalAuthenticatedUserId(req);
-    const latitude = parseCoordinate(req.query.latitude);
-    const longitude = parseCoordinate(req.query.longitude);
-    const postalCode = normalizePostalCode(req.query.postalCode);
-    const radiusMiles = parseCouponRadiusMiles(req.query.radiusMiles);
-    const requestedLimit = parsePositiveInteger(req.query.limit);
-    const limit = requestedLimit
-      ? Math.max(1, Math.min(COUPON_MAX_LIMIT, requestedLimit))
-      : COUPON_DEFAULT_LIMIT;
-
-    let searchOrigin = null;
-
-    if (latitude !== null || longitude !== null) {
-      if (latitude === null || longitude === null) {
-        return res.status(400).json({
-          error: 'latitude and longitude must be provided together',
-        });
-      }
-
-      if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
-        return res.status(400).json({
-          error: 'latitude or longitude is out of range',
-        });
-      }
-
-      searchOrigin = {
-        source: 'device',
-        latitude,
-        longitude,
-        postalCode: null,
-        formattedAddress: null,
-      };
-    } else if (postalCode) {
-      try {
-        const resolvedOrigin = await googleMapsAddressValidation.resolveUsPostalCodeSearchOrigin(postalCode);
-        searchOrigin = {
-          source: 'postalCode',
-          latitude: resolvedOrigin.latitude,
-          longitude: resolvedOrigin.longitude,
-          postalCode: resolvedOrigin.postalCode,
-          formattedAddress: resolvedOrigin.formattedAddress,
-        };
-      } catch (error) {
-        if (error instanceof googleMapsAddressValidation.AddressValidationError) {
-          return res.status(400).json({ error: error.message });
-        }
-
-        console.error('Error resolving coupon ZIP code search origin:', error);
-        return res.status(500).json({ error: 'Unable to resolve ZIP code right now' });
-      }
-    } else {
-      return res.status(400).json({
-        error: 'latitude and longitude or postalCode is required',
-      });
-    }
-
-    const coupons = await Coupon.aggregate(
-      buildNearbyCouponPipeline({
-        latitude: searchOrigin.latitude,
-        longitude: searchOrigin.longitude,
-        radiusMiles,
-        limit,
-      })
-    );
-
-    let redemptionMap = new Map();
-    if (currentUserId && coupons.length) {
-      const couponIds = coupons
-        .map((coupon) => coupon?._id)
-        .filter(Boolean);
-
-      if (couponIds.length) {
-        const redemptions = await CouponRedemption.find({
-          couponId: { $in: couponIds },
-          userId: currentUserId,
-          redemptionMonth: getCurrentCouponRedemptionMonth(),
-        })
-          .select('couponId redeemedAt')
-          .lean();
-
-        redemptionMap = new Map(
-          redemptions.map((redemption) => [
-            String(redemption.couponId),
-            redemption,
-          ])
-        );
-      }
-    }
-
-    return res.status(200).json({
-      coupons: coupons.map((coupon) => serializePublicCoupon(coupon, {
-        redemption: redemptionMap.get(String(coupon?._id)),
-      })),
-      searchOrigin,
-      radiusMiles,
-    });
-  } catch (error) {
-    console.error('Error fetching nearby merchant coupons:', error);
-    return res.status(500).json({ error: 'Internal Server Error' });
-  }
-});
-
-router.post('/v1/merchant-coupons/:couponId/redeem', userAuthMiddleware, async (req, res) => {
-  try {
-    const couponId = String(req.params.couponId || '').trim();
-    if (!couponId) {
-      return res.status(400).json({ error: 'couponId is required' });
-    }
-
-    const coupon = await Coupon.findOne({
-      _id: couponId,
-      status: 'approved',
-    }).select('_id');
-
-    if (!coupon) {
-      return res.status(404).json({ error: 'Coupon not found' });
-    }
-
-    const redemptionMonth = getCurrentCouponRedemptionMonth();
-    const redeemedAt = new Date();
-
-    try {
-      const redemption = await CouponRedemption.create({
-        couponId: coupon._id,
-        userId: req.userId,
-        redemptionMonth,
-        redeemedAt,
-      });
-
-      return res.status(200).json({
-        ok: true,
-        didRedeem: true,
-        alreadyRedeemedThisMonth: false,
-        redemptionMonth,
-        redeemedAt: redemption.redeemedAt,
-      });
-    } catch (error) {
-      if (!isDuplicateKeyError(error)) {
-        throw error;
-      }
-
-      const existingRedemption = await CouponRedemption.findOne({
-        couponId: coupon._id,
-        userId: req.userId,
-        redemptionMonth,
-      }).select('redeemedAt');
-
-      return res.status(200).json({
-        ok: true,
-        didRedeem: false,
-        alreadyRedeemedThisMonth: true,
-        redemptionMonth,
-        redeemedAt: existingRedemption?.redeemedAt || null,
-      });
-    }
-  } catch (error) {
-    if (isMongooseCastError(error)) {
-      return res.status(400).json({ error: 'Invalid coupon id' });
-    }
-
-    console.error('Error redeeming merchant coupon:', error);
-    return res.status(500).json({ error: 'Internal Server Error' });
-  }
-});
-
 router.get('/breez-api-key', async (req, res) => {
   try {
       if (!breezApiKey) {
@@ -712,7 +418,7 @@ router.post('/auth/nonce', async (req, res) => {
 //  POST /auth/wallet-login
 //  Verifies signature over server-canonical messageToSign,
 //  then consumes nonce (single-use).
-//  Also receives sparkAddress and stores it on the user.
+//  Also receives sparkAddress and stores encrypted payout destination fields.
 // ------------------------------------------------------
 router.post('/auth/wallet-login', async (req, res) => {
   try {
@@ -748,13 +454,22 @@ router.post('/auth/wallet-login', async (req, res) => {
     }
 
     const sparkAddrTrim = String(sparkAddress).trim();
-    const userPrivacyFields = buildUserPrivacyFields({
-      walletPubkey: pubkey,
-      sparkAddress: sparkAddrTrim,
-    });
+    let walletPrivacyFields;
+    try {
+      walletPrivacyFields = buildUserPrivacyFields({
+        walletPubkey: pubkey,
+      }, {
+        requirePepper: true,
+      });
+    } catch (error) {
+      console.error('Wallet login privacy configuration error:', error.message);
+      return res.status(500).json({ error: 'User privacy configuration is missing' });
+    }
 
     // ✅ Check nonce without consuming it yet
-    const nonceRecord = sessionHelper.peekNonce(nonce);
+    const nonceRecord = sessionHelper.peekNonce(nonce, {
+      purpose: sessionHelper.WALLET_AUTH_PURPOSE,
+    });
     if (!nonceRecord) {
       return res.status(401).json({ error: 'Invalid or expired nonce' });
     }
@@ -782,47 +497,63 @@ router.post('/auth/wallet-login', async (req, res) => {
     }
 
     // ✅ Consume nonce only after successful verification
-    sessionHelper.consumeNonce(nonce);
+    sessionHelper.consumeNonce(nonce, {
+      purpose: sessionHelper.WALLET_AUTH_PURPOSE,
+    });
 
-    // ✅ Find or create user, and backfill sparkAddress if missing
-    const userLookup = userPrivacyFields.walletPubkeyUserHmac
-      ? {
-          $or: [
-            { walletPubkeyUserHmac: userPrivacyFields.walletPubkeyUserHmac },
-            { walletPubkey: pubkey },
-          ],
-        }
-      : { walletPubkey: pubkey };
-    let user = await User.findOne(userLookup);
+    // ✅ Find or create user, and backfill payout destination privacy fields.
+    let user = await User.findOne({
+      walletPubkeyUserHmac: walletPrivacyFields.walletPubkeyUserHmac,
+    });
 
     if (!user) {
-      user = await User.create({
-        walletPubkey: pubkey,     // ✅ required field satisfied
+      const sparkPrivacyFields = buildUserPrivacyFields({
         sparkAddress: sparkAddrTrim,
-        ...userPrivacyFields,
+      });
+      const sparkEncryptionFields = buildSparkAddressEncryptionFields(sparkAddrTrim);
+
+      user = await User.create({
+        ...walletPrivacyFields,
+        ...sparkPrivacyFields,
+        ...sparkEncryptionFields,
       });
       console.log('New Wallet Linked');
     } else {
       let didMutateUser = false;
 
-      for (const [key, value] of Object.entries(userPrivacyFields)) {
+      for (const [key, value] of Object.entries(walletPrivacyFields)) {
         if (user[key] !== value) {
           user[key] = value;
           didMutateUser = true;
         }
       }
 
-      if (!user.sparkAddress) {
-        // Only set if missing (do not overwrite existing)
-        user.sparkAddress = sparkAddrTrim;
-        didMutateUser = true;
-      } else if (user.sparkAddress !== sparkAddrTrim) {
-        // Skeptical safety: log divergence so you can investigate.
-        // You might later decide to reject, rotate, or allow updates.
-        console.warn('sparkAddress mismatch for pubkey:', pubkey, {
-          existing: user.sparkAddress,
-          incoming: sparkAddrTrim,
+      const payoutSparkAddress = resolvePayoutSparkAddressForLogin(user, sparkAddrTrim);
+      if (payoutSparkAddress !== sparkAddrTrim) {
+        console.warn('sparkAddress mismatch for wallet user; keeping stored payout destination', {
+          userId: String(user._id),
+          walletPubkeyUserHmac: user.walletPubkeyUserHmac || walletPrivacyFields.walletPubkeyUserHmac || null,
+          hasStoredSparkAddress: true,
+          hasIncomingSparkAddress: true,
         });
+      }
+
+      const sparkPrivacyFields = buildUserPrivacyFields({
+        sparkAddress: payoutSparkAddress,
+      });
+      for (const [key, value] of Object.entries(sparkPrivacyFields)) {
+        if (user[key] !== value) {
+          user[key] = value;
+          didMutateUser = true;
+        }
+      }
+
+      if (!hasCurrentSparkAddressEncryptionFields(user) && payoutSparkAddress) {
+        const sparkEncryptionFields = buildSparkAddressEncryptionFields(payoutSparkAddress);
+        for (const [key, value] of Object.entries(sparkEncryptionFields)) {
+          user[key] = value;
+        }
+        didMutateUser = true;
       }
 
       if (didMutateUser) {
@@ -832,7 +563,7 @@ router.post('/auth/wallet-login', async (req, res) => {
 
     // Mint 1-hour JWT cookie
     const token = jwt.sign(
-      { userId: String(user._id), pubkey: pubkey },
+      { userId: String(user._id) },
       getJwtSecretKey(),
       { expiresIn: '1h' }
     );
@@ -847,9 +578,12 @@ router.post('/auth/wallet-login', async (req, res) => {
     return res.status(200).json({
       ok: true,
       userId: String(user._id),
-      pubkey: pubkey,
     });
   } catch (error) {
+    if (error?.publicMessage) {
+      return res.status(error.statusCode || 500).json({ error: error.publicMessage });
+    }
+
     console.error('Error in wallet-login:', error);
     return res.status(500).json({ error: 'Internal Server Error' });
   }
@@ -862,7 +596,7 @@ router.get('/session', userAuthMiddleware, async (req, res) => {
   try {
     const userId = req.userId;
 
-    const user = await User.findById(userId).select('_id walletPubkey');
+    const user = await User.findById(userId).select('_id');
     if (!user) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
@@ -870,7 +604,6 @@ router.get('/session', userAuthMiddleware, async (req, res) => {
     return res.status(200).json({
       ok: true,
       userId: String(user._id),
-      pubkey: user.walletPubkey,
     });
   } catch (error) {
     console.error('Error checking session:', error);
@@ -951,220 +684,6 @@ router.post('/Upload_Profile_Pic', userAuthMiddleware, upload.single('profilePic
   }
 });
 
-router.post('/lightning-address', userAuthMiddleware, async (req, res) => {
-  try {
-    const userId = req.userId;
-    const { lightningAddress } = req.body || {};
-
-    if (!lightningAddress || typeof lightningAddress !== 'string') {
-      return res.status(400).json({ error: 'lightningAddress is required' });
-    }
-
-    const trimmedLightningAddress = lightningAddress.trim().toLowerCase();
-
-    if (trimmedLightningAddress.length < 3 || trimmedLightningAddress.length > 320) {
-      return res.status(400).json({ error: 'lightningAddress looks invalid' });
-    }
-
-    // basic sanity check for user@domain format
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedLightningAddress)) {
-      return res.status(400).json({ error: 'lightningAddress format is invalid' });
-    }
-
-    const user = await User.findById(userId).select(
-      '_id lightningAddress lightningAddressUserHmac lightningAddressUserHmacVersion'
-    );
-    if (!user) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-
-    // no-op if already set
-    if (user.lightningAddress) {
-      const existingLightningPrivacyFields = buildUserPrivacyFields({
-        lightningAddress: user.lightningAddress,
-      });
-
-      let didBackfillPrivacyFields = false;
-      for (const [key, value] of Object.entries(existingLightningPrivacyFields)) {
-        if (user[key] !== value) {
-          user[key] = value;
-          didBackfillPrivacyFields = true;
-        }
-      }
-
-      if (didBackfillPrivacyFields) {
-        await user.save();
-      }
-
-      return res.status(200).json({
-        ok: true,
-        didUpdate: false,
-        lightningAddress: user.lightningAddress,
-      });
-    }
-
-    user.lightningAddress = trimmedLightningAddress;
-    assignUserPrivacyFields(user, {
-      lightningAddress: trimmedLightningAddress,
-    });
-    await user.save();
-
-    return res.status(200).json({
-      ok: true,
-      didUpdate: true,
-      lightningAddress: user.lightningAddress,
-    });
-  } catch (error) {
-    if (error && error.code === 11000) {
-      return res.status(409).json({ error: 'lightningAddress already exists on another user' });
-    }
-
-    console.error('Error saving lightningAddress:', error);
-    return res.status(500).json({ error: 'Internal Server Error' });
-  }
-});
-
-router.post('/LogRewardSpend', userAuthMiddleware, async (req, res) => {
-  try {
-    const userId = req.userId;
-
-    // Basic auth guard: user from JWT must exist
-    const user = await User.findById(userId).select('_id');
-    if (!user) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-
-    const {
-      direction,
-      usdAmountCents,
-      btcAmountSats,
-      destinationPubkey,
-      network,
-      status,
-      paymentHash,
-    } = req.body || {};
-
-    // ---- Basic validation (only what reward spend needs) ----
-    const errors = [];
-
-    if (!direction || !['sent', 'received'].includes(direction)) {
-      errors.push('direction must be "sent" or "received"');
-    }
-
-    if (
-      usdAmountCents === undefined ||
-      usdAmountCents === null ||
-      Number.isNaN(Number(usdAmountCents))
-    ) {
-      errors.push('usdAmountCents is required and must be a number');
-    }
-
-    if (
-      btcAmountSats === undefined ||
-      btcAmountSats === null ||
-      Number.isNaN(Number(btcAmountSats))
-    ) {
-      errors.push('btcAmountSats is required and must be a number');
-    }
-
-    if (!network || !['lightning', 'onchain', 'swap'].includes(network)) {
-      errors.push('network must be "lightning", "onchain", or "swap"');
-    }
-
-    const finalStatus = status || 'Completed';
-    if (!['Pending', 'Completed', 'Failed'].includes(finalStatus)) {
-      errors.push('status must be "Pending", "Completed", or "Failed"');
-    }
-
-    if (
-      destinationPubkey !== undefined &&
-      destinationPubkey !== null &&
-      typeof destinationPubkey !== 'string'
-    ) {
-      errors.push('destinationPubkey must be a string if provided');
-    }
-
-    if (
-      paymentHash !== undefined &&
-      paymentHash !== null &&
-      typeof paymentHash !== 'string'
-    ) {
-      errors.push('paymentHash must be a string if provided');
-    }
-
-    if (errors.length > 0) {
-      return res.status(400).json({ error: 'Invalid request', details: errors });
-    }
-
-    const usdAmountCentsNum = Number(usdAmountCents);
-    const btcAmountSatsNum = Number(btcAmountSats);
-    const normalizedPaymentHash =
-      typeof paymentHash === 'string' && paymentHash.trim().length > 0
-        ? paymentHash.trim()
-        : null;
-    const normalizedDestinationPubkey = normalizePubkey(destinationPubkey);
-
-    if (!Number.isFinite(usdAmountCentsNum) || usdAmountCentsNum <= 0) {
-      return res.status(400).json({
-        error: 'Invalid request',
-        details: ['usdAmountCents must be a positive number'],
-      });
-    }
-
-    if (!Number.isInteger(btcAmountSatsNum) || btcAmountSatsNum <= 0) {
-      return res.status(400).json({
-        error: 'Invalid request',
-        details: ['btcAmountSats must be a positive integer (sats)'],
-      });
-    }
-
-    if (
-      finalStatus === 'Completed' &&
-      network === 'lightning' &&
-      direction === 'sent' &&
-      !normalizedPaymentHash
-    ) {
-      return res.status(400).json({
-        error: 'Invalid request',
-        details: ['paymentHash is required for completed lightning sends'],
-      });
-    }
-
-    let rewardSpendResult = null;
-
-    // Only apply reward spend when status is Completed.
-    if (finalStatus === 'Completed') {
-      rewardSpendResult = await userRewardSpendFunction({
-        User,
-        RewardSpendPayment,
-        MerchantPubKey,
-        PlatformAnalytics,
-        userId,
-        usdAmountCentsNum,
-        btcAmountSatsNum,
-        destinationPubkey: normalizedDestinationPubkey || null,
-        network,
-        direction,
-        finalStatus,
-        paymentHash: normalizedPaymentHash,
-      });
-    }
-
-    const rewardSpendApplied = Boolean(rewardSpendResult?.rewardSpendApplied);
-
-    return res.status(200).json({
-      ok: true,
-      rewardSpendApplied,
-      merchantMatched: rewardSpendResult?.merchantMatched ?? false,
-      rewardSpendPaymentRecorded: rewardSpendResult?.rewardSpendPaymentRecorded ?? false,
-      duplicatePaymentHash: rewardSpendResult?.duplicatePaymentHash ?? false,
-    });
-  } catch (error) {
-    console.error('Error logging reward spend:', error);
-    return res.status(500).json({ error: 'Internal Server Error' });
-  }
-});
-
 router.get('/v1/reward-claim-encryption-key', async (req, res) => {
   try {
     res.set('Cache-Control', 'public, max-age=3600');
@@ -1178,19 +697,9 @@ router.get('/v1/reward-claim-encryption-key', async (req, res) => {
 router.post('/v2/reward-spend-claims', userAuthMiddleware, async (req, res) => {
   try {
     const userId = req.userId;
-    const claimId = typeof req.body?.clientClaimId === 'string'
-      ? req.body.clientClaimId.trim().slice(0, 36)
-      : 'none';
-    rewardClaimTrace('start', {
-      claimId,
-      userFp: rewardTraceFingerprint(String(userId || '')),
-      keyId: typeof req.body?.keyId === 'string' ? req.body.keyId.trim() : 'none',
-      algorithm: typeof req.body?.algorithm === 'string' ? req.body.algorithm.trim() : 'none',
-    });
 
     const user = await User.findById(userId).select('_id');
     if (!user) {
-      rewardClaimTrace('reject unauthorized-user', { claimId });
       return res.status(401).json({ ok: false, error: 'Unauthorized' });
     }
 
@@ -1198,10 +707,6 @@ router.post('/v2/reward-spend-claims', userAuthMiddleware, async (req, res) => {
     try {
       payload = rewardClaimEncryption.decryptClaimEnvelope(req.body || {});
     } catch (error) {
-      rewardClaimTrace('reject decrypt-failed', {
-        claimId,
-        errorName: error?.name || 'Error',
-      });
       return res.status(400).json({ ok: false, error: 'Invalid encrypted reward claim' });
     }
 
@@ -1216,20 +721,6 @@ router.post('/v2/reward-spend-claims', userAuthMiddleware, async (req, res) => {
     const occurredAt = payload.occurredAt ? new Date(payload.occurredAt) : new Date();
     const errors = [];
 
-    rewardClaimTrace('decrypted', {
-      claimId,
-      merchantHashFp: rewardTraceFingerprint(merchantPubkeyHash),
-      paymentHashFp: rewardTraceFingerprint(paymentHash),
-      paymentHashEncoding: paymentHashProof?.encoding || 'invalid',
-      preimagePresent: preimage.length > 0,
-      preimageEncoding: preimageProof?.encoding || 'invalid',
-      invoicePresent: invoice.length > 0,
-      invoiceLen: invoice.length,
-      btcAmountSats: Number.isFinite(btcAmountSatsNum) ? btcAmountSatsNum : null,
-      usdAmountCents: Number.isFinite(usdAmountCentsNum) ? usdAmountCentsNum : null,
-      occurredAt: Number.isNaN(occurredAt.getTime()) ? 'invalid' : occurredAt.toISOString(),
-    });
-
     if (!merchantPubkeyHash) errors.push('merchantPubkeyHash is required');
     if (!paymentHashProof) errors.push('paymentHash must be a 32-byte hex or base64 value');
     if (!preimageProof) errors.push('preimage must be a 32-byte hex or base64 value');
@@ -1243,50 +734,25 @@ router.post('/v2/reward-spend-claims', userAuthMiddleware, async (req, res) => {
     if (Number.isNaN(occurredAt.getTime())) errors.push('occurredAt must be a valid date');
 
     if (errors.length > 0) {
-      rewardClaimTrace('reject validation', { claimId, errors });
       return res.status(400).json({ ok: false, error: 'Invalid request', details: errors });
     }
 
     const paymentHashFromPreimage = sha256Hex(Buffer.from(preimage, 'hex'));
     if (paymentHashFromPreimage !== paymentHash) {
-      rewardClaimTrace('reject preimage-mismatch', {
-        claimId,
-        paymentHashFp: rewardTraceFingerprint(paymentHash),
-      });
       return res.status(400).json({ ok: false, error: 'preimage does not match paymentHash' });
     }
-    rewardClaimTrace('preimage-verified', {
-      claimId,
-      paymentHashFp: rewardTraceFingerprint(paymentHash),
-    });
 
     const invoiceMetadata = decodeBolt11(invoice);
     if (!invoiceMetadata?.paymentHash || !invoiceMetadata?.destinationPubkey) {
-      rewardClaimTrace('reject invoice-unverified', {
-        claimId,
-        invoiceHashFp: rewardTraceFingerprint(invoice),
-        hasInvoicePaymentHash: Boolean(invoiceMetadata?.paymentHash),
-        hasInvoiceDestination: Boolean(invoiceMetadata?.destinationPubkey),
-      });
       return res.status(400).json({ ok: false, error: 'invoice could not be verified' });
     }
 
     if (normalizeHash(invoiceMetadata.paymentHash) !== paymentHash) {
-      rewardClaimTrace('reject invoice-payment-hash-mismatch', {
-        claimId,
-        paymentHashFp: rewardTraceFingerprint(paymentHash),
-        invoicePaymentHashFp: rewardTraceFingerprint(normalizeHash(invoiceMetadata.paymentHash)),
-      });
       return res.status(400).json({ ok: false, error: 'invoice paymentHash mismatch' });
     }
 
     const invoiceMerchantHash = MerchantPubKey.hashPubkey(invoiceMetadata.destinationPubkey);
     if (invoiceMerchantHash !== merchantPubkeyHash) {
-      rewardClaimTrace('reject merchant-hash-mismatch', {
-        claimId,
-        claimedMerchantHashFp: rewardTraceFingerprint(merchantPubkeyHash),
-        invoiceMerchantHashFp: rewardTraceFingerprint(invoiceMerchantHash),
-      });
       return res.status(400).json({ ok: false, error: 'invoice destination is not the claimed merchant' });
     }
 
@@ -1295,20 +761,8 @@ router.post('/v2/reward-spend-claims', userAuthMiddleware, async (req, res) => {
       invoiceMetadata.amountSats > 0 &&
       invoiceMetadata.amountSats !== btcAmountSatsNum
     ) {
-      rewardClaimTrace('reject invoice-amount-mismatch', {
-        claimId,
-        invoiceAmountSats: invoiceMetadata.amountSats,
-        claimedAmountSats: btcAmountSatsNum,
-      });
       return res.status(400).json({ ok: false, error: 'invoice amount mismatch' });
     }
-    rewardClaimTrace('invoice-verified', {
-      claimId,
-      merchantHashFp: rewardTraceFingerprint(merchantPubkeyHash),
-      paymentHashFp: rewardTraceFingerprint(paymentHash),
-      invoiceHashFp: rewardTraceFingerprint(invoice),
-      invoiceAmountSats: Number.isInteger(invoiceMetadata.amountSats) ? invoiceMetadata.amountSats : null,
-    });
 
     const merchantPubkeyMatch = await MerchantPubKey.findOne({
       pubkeyHash: merchantPubkeyHash,
@@ -1316,30 +770,12 @@ router.post('/v2/reward-spend-claims', userAuthMiddleware, async (req, res) => {
     }).select('_id').lean();
 
     if (!merchantPubkeyMatch) {
-      rewardClaimTrace('reject merchant-not-eligible', {
-        claimId,
-        merchantHashFp: rewardTraceFingerprint(merchantPubkeyHash),
-      });
       return res.status(400).json({ ok: false, error: 'merchant is not reward eligible' });
     }
-    rewardClaimTrace('merchant-found', {
-      claimId,
-      merchantHashFp: rewardTraceFingerprint(merchantPubkeyHash),
-      merchantIdFp: rewardTraceFingerprint(String(merchantPubkeyMatch._id || '')),
-    });
 
     const monthKey = occurredAt.toISOString().slice(0, 7);
     const paymentHashHash = sha256Hex(Buffer.from(paymentHash, 'utf8'));
     const invoiceHash = sha256Hex(Buffer.from(invoice, 'utf8'));
-    rewardClaimTrace('create-payment-row', {
-      claimId,
-      monthKey,
-      paymentHashHashFp: paymentHashHash.slice(0, 12),
-      invoiceHashFp: invoiceHash.slice(0, 12),
-      merchantHashFp: rewardTraceFingerprint(merchantPubkeyHash),
-      btcAmountSats: btcAmountSatsNum,
-      usdAmountCents: usdAmountCentsNum,
-    });
 
     try {
       await RewardSpendPayment.create({
@@ -1358,12 +794,6 @@ router.post('/v2/reward-spend-claims', userAuthMiddleware, async (req, res) => {
       });
     } catch (error) {
       if (error && error.code === 11000) {
-        rewardClaimTrace('duplicate-payment-hash', {
-          claimId,
-          paymentHashHashFp: paymentHashHash.slice(0, 12),
-          invoiceHashFp: invoiceHash.slice(0, 12),
-          errorCode: error.code,
-        });
         return res.status(200).json({
           ok: true,
           rewardSpendApplied: false,
@@ -1373,20 +803,6 @@ router.post('/v2/reward-spend-claims', userAuthMiddleware, async (req, res) => {
 
       throw error;
     }
-    rewardClaimTrace('payment-row-created', {
-      claimId,
-      paymentHashHashFp: paymentHashHash.slice(0, 12),
-      invoiceHashFp: invoiceHash.slice(0, 12),
-    });
-
-    await User.updateOne(
-      { _id: userId },
-      { $inc: { lifetimeMerchantSpendCents: usdAmountCentsNum } }
-    );
-    rewardClaimTrace('user-updated', {
-      claimId,
-      usdAmountCents: usdAmountCentsNum,
-    });
 
     await PlatformAnalytics.updateOne(
       { _id: 'platform' },
@@ -1402,17 +818,7 @@ router.post('/v2/reward-spend-claims', userAuthMiddleware, async (req, res) => {
       },
       { upsert: true }
     );
-    rewardClaimTrace('platform-updated', {
-      claimId,
-      btcAmountSats: btcAmountSatsNum,
-      usdAmountCents: usdAmountCentsNum,
-    });
 
-    rewardClaimTrace('success', {
-      claimId,
-      rewardSpendApplied: true,
-      duplicatePaymentHash: false,
-    });
     return res.status(200).json({
       ok: true,
       rewardSpendApplied: true,
@@ -1446,7 +852,7 @@ router.post('/ReportMerchantPubkey', userAuthMiddleware, async (req, res) => {
     }
 
     const reporter = await User.findById(req.userId)
-      .select('lightningAddress pubkey')
+      .select('walletPubkeyUserHmac')
       .lean();
     const merchantPubkeyMatch = await MerchantPubKey.findOne(merchantPubkeyQuery(trimmedDestinationPubkey))
       .select('_id')
@@ -1458,8 +864,7 @@ router.post('/ReportMerchantPubkey', userAuthMiddleware, async (req, res) => {
         {
           reportedAt: new Date().toISOString(),
           reporterUserId: req.userId,
-          reporterWalletPubkey: req.pubkey || reporter?.pubkey || null,
-          reporterLightningAddress: reporter?.lightningAddress || null,
+          reporterWalletPubkeyHmac: reporter?.walletPubkeyUserHmac || null,
           merchantName: trimmedMerchantName,
           merchantAddress: trimmedMerchantAddress,
           destinationPubkey: trimmedDestinationPubkey,
@@ -1474,40 +879,6 @@ router.post('/ReportMerchantPubkey', userAuthMiddleware, async (req, res) => {
     return res.status(200).json({ ok: true });
   } catch (error) {
     console.error('Merchant pubkey report error:', error);
-    return res.status(500).json({ ok: false, error: 'Server error' });
-  }
-});
-
-router.post('/RewardsCheck', userAuthMiddleware, async (req, res) => {
-  try {
-    const { destinationPubkey } = req.body || {};
-    if (destinationPubkey !== undefined && destinationPubkey !== null && typeof destinationPubkey !== 'string') {
-      return res.status(400).json({
-        ok: false,
-        error: 'destinationPubkey must be a string',
-      });
-    }
-
-    const trimmedDestinationPubkey = normalizePubkey(destinationPubkey);
-
-    if (!trimmedDestinationPubkey) {
-      return res.status(400).json({
-        ok: false,
-        error: 'destinationPubkey is required',
-      });
-    }
-
-    const merchantPubkeyMatch = await MerchantPubKey.findOne(merchantPubkeyQuery(trimmedDestinationPubkey))
-      .select('_id')
-      .lean();
-
-    return res.status(200).json({
-      ok: true,
-      rewardEligible: !!merchantPubkeyMatch,
-      merchantMatched: !!merchantPubkeyMatch,
-    });
-  } catch (error) {
-    console.error('Rewards check error:', error);
     return res.status(500).json({ ok: false, error: 'Server error' });
   }
 });
@@ -1649,24 +1020,117 @@ router.get('/v1/RewardStats', userAuthMiddleware, async (req, res) => {
   }
 });
 
-async function deleteAuthenticatedAccount(req, res) {
+async function issueAccountDeleteNonce(req, res) {
   try {
-    const userId = req.userId;
-    const user = await User.findById(userId).select('_id walletPubkey profilePicUrl');
+    const user = await User.findById(req.userId).select('_id');
     if (!user) {
       return res.status(401).json({ ok: false, error: 'Unauthorized' });
     }
 
-    const [
-      deviceRegistrationResult,
-      userBlockResult,
-      profilePicDeleted,
-      messagingV4Deleted,
-    ] = await Promise.all([
-      MessagingDeviceRegistration.deleteMany({ userId: user._id }),
-      UserBlock.deleteMany({ blockerUserId: user._id }),
+    const domain = process.env.WALLET_AUTH_DOMAIN || 'example.invalid';
+    const { nonce, expiresAt, messageToSign, purpose } = sessionHelper.issueNonce({
+      domain,
+      purpose: sessionHelper.ACCOUNT_DELETE_PURPOSE,
+    });
+
+    return res.status(200).json({
+      ok: true,
+      nonce,
+      expiresAt,
+      messageToSign,
+      purpose,
+    });
+  } catch (error) {
+    console.error('Error generating account delete nonce:', error);
+    return res.status(500).json({ ok: false, error: 'Internal Server Error' });
+  }
+}
+
+function normalizeAccountDeleteProofPayload(payload = {}) {
+  const rawWalletPubkey = payload.walletPubkey ?? payload.pubkey;
+  const walletPubkey = normalizeWalletPubkey(rawWalletPubkey);
+  const nonce = typeof payload.nonce === 'string' ? payload.nonce.trim() : '';
+  const signature = typeof payload.signature === 'string' ? payload.signature.trim() : '';
+  const errors = [];
+
+  if (!walletPubkey) errors.push('walletPubkey is required or invalid');
+  if (!nonce) errors.push('nonce is required');
+  if (!signature) errors.push('signature is required');
+
+  return {
+    errors,
+    walletPubkey,
+    nonce,
+    signature,
+  };
+}
+
+async function deleteAuthenticatedAccountV2(req, res) {
+  try {
+    const userId = req.userId;
+    const user = await User.findById(userId).select('_id walletPubkeyUserHmac profilePicUrl');
+    if (!user) {
+      return res.status(401).json({ ok: false, error: 'Unauthorized' });
+    }
+
+    const proof = normalizeAccountDeleteProofPayload(req.body || {});
+    if (proof.errors.length) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Invalid request',
+        details: proof.errors,
+      });
+    }
+
+    const nonceRecord = sessionHelper.peekNonce(proof.nonce, {
+      purpose: sessionHelper.ACCOUNT_DELETE_PURPOSE,
+    });
+    if (!nonceRecord) {
+      return res.status(401).json({ ok: false, error: 'Invalid or expired nonce' });
+    }
+
+    const isValidSignature = sessionHelper.verifyBreezSignedMessage({
+      message: nonceRecord.messageToSign,
+      pubkey: proof.walletPubkey,
+      signature: proof.signature,
+    });
+    if (!isValidSignature) {
+      return res.status(401).json({ ok: false, error: 'Invalid signature' });
+    }
+
+    let walletPrivacyFields;
+    try {
+      walletPrivacyFields = buildUserPrivacyFields({
+        walletPubkey: proof.walletPubkey,
+      }, {
+        requirePepper: true,
+      });
+    } catch (error) {
+      console.error('Account delete privacy configuration error:', error.message);
+      return res.status(500).json({ ok: false, error: 'User privacy configuration is missing' });
+    }
+
+    if (!user.walletPubkeyUserHmac) {
+      return res.status(409).json({
+        ok: false,
+        error: 'User wallet privacy identity is missing',
+      });
+    }
+
+    if (user.walletPubkeyUserHmac !== walletPrivacyFields.walletPubkeyUserHmac) {
+      return res.status(403).json({
+        ok: false,
+        error: 'walletPubkey does not match the authenticated user',
+      });
+    }
+
+    sessionHelper.consumeNonce(proof.nonce, {
+      purpose: sessionHelper.ACCOUNT_DELETE_PURPOSE,
+    });
+
+    const [profilePicDeleted, messagingV4Deleted] = await Promise.all([
       deleteProfilePictureFromR2(user.profilePicUrl),
-      deleteMessagingV4AccountDataForUser(user, req),
+      deleteMessagingV4AccountDataForWalletPubkey(proof.walletPubkey),
     ]);
 
     await user.deleteOne();
@@ -1679,8 +1143,6 @@ async function deleteAuthenticatedAccount(req, res) {
       deleted: {
         user: true,
         profilePic: profilePicDeleted,
-        deviceRegistrations: deviceRegistrationResult.deletedCount || 0,
-        userBlocks: userBlockResult.deletedCount || 0,
         v4MessagingAccount: messagingV4Deleted?.account || 0,
         v4MessagingBindings: messagingV4Deleted?.bindings || 0,
         v4DeviceRegistrations: messagingV4Deleted?.deviceRegistrations || 0,
@@ -1691,13 +1153,13 @@ async function deleteAuthenticatedAccount(req, res) {
       },
     });
   } catch (err) {
-    console.error('Error in delete account endpoint:', err);
+    console.error('Error in signed delete account endpoint:', err);
     return res.status(500).json({ ok: false, error: 'An error occurred while processing the request' });
   }
 }
 
-router.post('/v1/account/delete', userAuthMiddleware, deleteAuthenticatedAccount);
-router.post('/iOS-delete-account', userAuthMiddleware, deleteAuthenticatedAccount);
+router.post('/v2/account/delete/nonce', userAuthMiddleware, issueAccountDeleteNonce);
+router.post('/v2/account/delete', userAuthMiddleware, deleteAuthenticatedAccountV2);
 
 router.getRewardsMinimumVersion = getRewardsMinimumVersion;
 router.rewardsMinimumVersions = rewardsMinimumVersions;

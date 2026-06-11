@@ -2,15 +2,6 @@ const mongoose = require('mongoose');
 
 const userSchema = new mongoose.Schema(
   {
-    // 🔑 canonical identity
-    walletPubkey: {
-      type: String,
-      required: true,
-      unique: true,
-      index: true,
-      immutable: true,
-    },
-
     walletPubkeyUserHmac: {
       type: String,
       unique: true,
@@ -30,6 +21,26 @@ const userSchema = new mongoose.Schema(
       index: true,
     },
 
+    sparkAddressCiphertext: {
+      type: String,
+      default: null,
+    },
+
+    sparkAddressIv: {
+      type: String,
+      default: null,
+    },
+
+    sparkAddressAuthTag: {
+      type: String,
+      default: null,
+    },
+
+    sparkAddressKeyVersion: {
+      type: String,
+      default: null,
+    },
+
     sparkAddressUserHmac: {
       type: String,
       unique: true,
@@ -42,53 +53,8 @@ const userSchema = new mongoose.Schema(
       default: null,
     },
 
-    lightningAddress: {
-      type: String,
-      unique: true,
-      sparse: true,
-      index: true,
-    },
-
-    lightningAddressUserHmac: {
-      type: String,
-      unique: true,
-      sparse: true,
-      index: true,
-    },
-
-    lightningAddressUserHmacVersion: {
-      type: String,
-      default: null,
-    },
-
     profilePicUrl: {
       type: String,
-      default: null,
-    },
-
-    messagingPubkeyV2: {
-      type: String,
-      default: null,
-      index: true,
-    },
-
-    messagingIdentityV2Signature: {
-      type: String,
-      default: null,
-    },
-
-    messagingIdentityV2SignatureVersion: {
-      type: Number,
-      default: null,
-    },
-
-    messagingIdentityV2SignedAt: {
-      type: Date,
-      default: null,
-    },
-
-    messagingIdentityV2UpdatedAt: {
-      type: Date,
       default: null,
     },
 
@@ -101,10 +67,6 @@ const userSchema = new mongoose.Schema(
       type: Date,
     },
 
-    lifetimeMerchantSpendCents: {
-      type: Number,
-      default: 0,
-    },
   },
   { timestamps: true }
 );
